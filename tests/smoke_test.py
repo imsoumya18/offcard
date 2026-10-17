@@ -5,6 +5,7 @@ Usage:  python tests/smoke_test.py <command to run sony-import...>
   e.g.  python tests/smoke_test.py python sony-import.py
         python tests/smoke_test.py ./dist/sony-import
 """
+import json
 import os
 import random
 import struct
@@ -87,8 +88,8 @@ def main():
                 got.add(tuple(os.path.relpath(os.path.join(dirpath, fn), dest).split(os.sep)))
         if got != EXPECTED:
             sys.exit(f"FAIL: unexpected backup tree\n  missing: {EXPECTED - got}\n  extra: {got - EXPECTED}")
-        out = run(tool + ["plan", "--dest", dest, "--card", card])
-        if "Nothing new to back up" not in out:
+        out = run(tool + ["plan", "--dest", dest, "--card", card, "--json"])
+        if json.loads(out)["new_items"] != 0:
             sys.exit("FAIL: second run wants to copy files again")
     print("PASS")
 

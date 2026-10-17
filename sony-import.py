@@ -28,6 +28,7 @@ import sys
 import time
 from datetime import datetime
 
+__version__ = "1.1.0"
 IS_WIN = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
 TRASH = "Recycle Bin" if IS_WIN else "Trash"
@@ -39,6 +40,83 @@ PHOTO_EXT = {".ARW", ".JPG", ".JPEG", ".HIF", ".HEIF"}
 SONY_DCIM_DIR = re.compile(r"^\d{3}(MSDCF|\d{5})$")
 NUM_WIDTH = 5
 CHUNK = 8 * 1024 * 1024
+
+
+# ---------------------------------------------------------------- style
+# Colour carries meaning: magenta = memory card, cyan = backup folder / structure,
+# green = done & safe, yellow = needs attention, red = errors, dim = secondary detail.
+
+def _enable_color():
+    if os.environ.get("NO_COLOR") or not sys.stdout.isatty() or os.environ.get("TERM") == "dumb":
+        return False
+    if not IS_WIN:
+        return True
+    try:  # Windows 10+: switch the console into ANSI mode
+        import ctypes
+        k = ctypes.windll.kernel32
+        h, mode = k.GetStdHandle(-11), ctypes.c_uint32()
+        return bool(k.GetConsoleMode(h, ctypes.byref(mode)) and k.SetConsoleMode(h, mode.value | 0x0004))
+    except Exception:
+        return False
+
+
+def _can_print(text):
+    try:
+        text.encode(sys.stdout.encoding or "ascii")
+        return True
+    except Exception:
+        return False
+
+
+COLOR = _enable_color()
+FANCY = _can_print("█░✓✗⚠→·─┌┐└┘│›")
+BOLD, DIM, RED, GREEN, YELLOW, MAGENTA, CYAN = "1", "2", "31", "32", "33", "35", "36"
+DOT = "·" if FANCY else "-"
+ARROW = "→" if FANCY else "->"
+
+
+def paint(text, *codes):
+    return f"\033[{';'.join(codes)}m{text}\033[0m" if COLOR and codes else str(text)
+
+
+def card_path(p):
+    return paint(p, BOLD, MAGENTA)
+
+
+def dest_path(p):
+    return paint(p, BOLD, CYAN)
+
+
+def ok(text):
+    return paint(("✓ " if FANCY else "") + text, BOLD, GREEN)
+
+
+def warn(text):
+    return paint(("⚠ " if FANCY else "! ") + text, BOLD, YELLOW)
+
+
+def bad(text):
+    return paint(("✗ " if FANCY else "x ") + text, BOLD, RED)
+
+
+def dim(text):
+    return paint(text, DIM)
+
+
+def step(n, total, title):
+    rule = "─" if FANCY else "-"
+    head = f"{rule * 2} Step {n} of {total} {DOT} {title} "
+    print("\n" + paint(head + rule * max(0, 60 - len(head)), BOLD, CYAN))
+
+
+def nice_dt(dt):
+    d = datetime.strptime(dt[:19], "%Y:%m:%d %H:%M:%S")
+    return f"{d.day} {MONTHS[d.month][:3]} {d.year}, {d:%H:%M}"
+
+
+def nice_secs(sec):
+    sec = int(sec)
+    return f"{sec}s" if sec < 60 else f"{sec // 60}m {sec % 60:02d}s"
 
 
 # ---------------------------------------------------------------- metadata
@@ -258,14 +336,12 @@ def scan_card(root):
             if arw and jpg:
                 # JPG first: if the ARW made it to the backup, the JPG did too.
                 files = jpg[:1] + arw[:1]
-                items.append({"kind": "pair", "card": root, "files": files,
-                              "key_file": arw[0], "dt": photo_datetime(arw[0])})
+                items.append({"kind": "pair", "card": root, "files": files, "key_file": arw[0]})
                 rest = jpg[1:] + arw[1:] + other
             else:
                 rest = paths
             for p in rest:
-                items.append({"kind": "photo", "card": root, "files": [p],
-                              "key_file": p, "dt": photo_datetime(p)})
+                items.append({"kind": "photo", "card": root, "files": [p], "key_file": p})
     clip = os.path.join(root, "PRIVATE", "M4ROOT", "CLIP")
     if os.path.isdir(clip):
         for fn in sorted(os.listdir(clip)):
@@ -274,13 +350,19 @@ def scan_card(root):
             mp4 = os.path.join(clip, fn)
             xml = video_xml_for(mp4)
             items.append({"kind": "video", "card": root,
-                          "files": [mp4] + ([xml] if xml else []),
-                          "key_file": mp4, "dt": video_datetime(mp4, xml)})
-    for it in items:
-        it["size"] = sum(os.path.getsize(p) for p in it["files"])
-        it["key_size"] = os.path.getsize(it["key_file"])
-        it["fp"] = fingerprint(it["key_file"])
+                          "files": [mp4] + ([xml] if xml else []), "key_file": mp4})
     return items
+
+
+def read_item(it):
+    """The slow part: read capture time and a content fingerprint from the card."""
+    if it["kind"] == "video":
+        it["dt"] = video_datetime(it["key_file"], it["files"][1] if len(it["files"]) > 1 else None)
+    else:
+        it["dt"] = photo_datetime(it["key_file"])
+    it["size"] = sum(os.path.getsize(p) for p in it["files"])
+    it["key_size"] = os.path.getsize(it["key_file"])
+    it["fp"] = fingerprint(it["key_file"])
 
 
 # ---------------------------------------------------------------- destination scan
@@ -349,12 +431,15 @@ def day_folder(dest, dt):
 def build_plan(dest, cards):
     index = DestIndex(dest)
     new, seen_keys, per_card = [], set(), {}
-    for card in cards:
-        items = scan_card(card)
+    listed = [(card, scan_card(card)) for card in cards]
+    bar = Bar(sum(len(items) for _, items in listed), "Checking", CYAN)
+    for card, items in listed:
         stats = {"card": card, "photos_on_card": 0, "videos_on_card": 0,
                  "already_photos": 0, "already_videos": 0, "new_photos": 0, "new_videos": 0,
                  "new_bytes": 0, "from": None, "to": None}
         for it in items:
+            read_item(it)
+            bar.update(1)
             is_video = it["kind"] == "video"
             stats["videos_on_card" if is_video else "photos_on_card"] += len(it["files"]) if not is_video else 1
             key = (it["key_size"], it["dt"], it["fp"])
@@ -368,6 +453,7 @@ def build_plan(dest, cards):
             stats["from"] = min(filter(None, [stats["from"], it["dt"]]))
             stats["to"] = max(filter(None, [stats["to"], it["dt"]]))
         per_card[card] = stats
+    bar.finish()
     new.sort(key=lambda it: (it["dt"], it["key_file"]))
     photo_n, video_n = index.max_photo, index.max_video
     for it in new:
@@ -400,32 +486,67 @@ def human(n):
         n /= 1024
 
 
-class Progress:
-    def __init__(self, total_bytes, total_files):
-        self.total, self.files_total = max(total_bytes, 1), total_files
-        self.done, self.files_done = 0, 0
-        self.tty = sys.stdout.isatty()
-        self.last_pct = -1
-        self.start = time.time()
+class Bar:
+    """One-line progress bar. Silent when not on a terminal, unless log=True
+    (then it prints 'PROGRESS NN% ...' lines every 5% for scripts and logs)."""
+    WIDTH = 28
 
-    def update(self, nbytes=0, file_done=False):
-        self.done += nbytes
+    def __init__(self, total, label, color, nbytes=False, files_total=0, log=False):
+        self.total, self.label, self.color = max(total, 1), label, color
+        self.nbytes, self.files_total, self.log = nbytes, files_total, log
+        self.done = self.files_done = 0
+        self.tty = sys.stdout.isatty()
+        self.start = time.time()
+        self.last_draw, self.last_pct = 0.0, -5
+
+    def update(self, n=0, file_done=False):
+        self.done += n
         self.files_done += 1 if file_done else 0
-        pct = int(self.done * 100 / self.total)
         if self.tty:
-            bar = "#" * (pct // 2) + "-" * (50 - pct // 2)
-            sys.stdout.write(f"\r[{bar}] {pct:3d}%  {self.files_done}/{self.files_total} files  "
-                             f"{human(self.done)} / {human(self.total)}   ")
-            sys.stdout.flush()
-        elif pct >= self.last_pct + 5 or (file_done and self.files_done == self.files_total):
-            print(f"PROGRESS {pct}% {self.files_done}/{self.files_total} files "
-                  f"{human(self.done)}/{human(self.total)}", flush=True)
-            self.last_pct = pct
+            if time.time() - self.last_draw >= 0.08:
+                self._draw()
+        elif self.log:
+            pct = int(self.done * 100 / self.total)
+            if pct >= self.last_pct + 5 or (file_done and self.files_done == self.files_total):
+                print(f"PROGRESS {pct}% {self.files_done}/{self.files_total} files "
+                      f"{human(self.done)}/{human(self.total)}", flush=True)
+                self.last_pct = pct
+
+    def _draw(self):
+        self.last_draw = time.time()
+        frac = min(self.done / self.total, 1.0)
+        full = int(frac * self.WIDTH)
+        if FANCY:
+            bar = paint("█" * full, self.color) + paint("░" * (self.WIDTH - full), DIM)
+        else:
+            bar = "[" + paint("#" * full, self.color) + "-" * (self.WIDTH - full) + "]"
+        details = []  # (priority, text): lowest priority is dropped first on narrow windows
+        if self.nbytes:
+            details.append((4, f"{self.files_done}/{self.files_total} files"))
+            details.append((2, f"{human(self.done)} of {human(self.total)}"))
+            elapsed = time.time() - self.start
+            if elapsed > 1 and self.done:
+                speed = self.done / elapsed
+                details.append((1, f"{human(speed)}/s"))
+                details.append((3, f"{nice_secs((self.total - self.done) / speed)} left"))
+        else:
+            details.append((4, f"{self.done} of {self.total} files"))
+        cols = shutil.get_terminal_size((80, 24)).columns
+        fixed = 2 + len(self.label) + 1 + self.WIDTH + (0 if FANCY else 2) + 6
+        while details and fixed + len(f" {DOT} ".join(t for _, t in details)) + 1 > cols:
+            details.remove(min(details))
+        details = [t for _, t in details]
+        line = (f"  {paint(self.label, BOLD)} {bar} {paint(f'{int(frac * 100):3d}%', BOLD)}  "
+                + dim(f" {DOT} ".join(details)))
+        sys.stdout.write("\r" + line + ("\033[K" if COLOR else ""))
+        sys.stdout.flush()
 
     def finish(self):
         if self.tty:
+            self._draw()
             sys.stdout.write("\n")
-        print(f"Finished in {time.time() - self.start:.0f}s", flush=True)
+            sys.stdout.flush()
+        return time.time() - self.start
 
 
 def copy_file(src, dst, progress):
@@ -455,7 +576,8 @@ def copy_file(src, dst, progress):
 def run_import(plan):
     items = plan["items"]
     total_files = sum(len(it["files"]) for it in items)
-    progress = Progress(sum(it["size"] for it in items), total_files)
+    progress = Bar(sum(it["size"] for it in items), "Copying", GREEN, nbytes=True,
+                   files_total=total_files, log=True)
     copied, errors, pairs = [], [], []
     for it in items:
         try:
@@ -470,15 +592,15 @@ def run_import(plan):
                 pairs.append({"arw": arw, "jpg": jpg})
         except Exception as e:
             errors.append({"files": it["files"], "error": str(e)})
-    progress.finish()
+    seconds = progress.finish()
     by_day = {}
-    for c in sorted(copied, key=lambda c: c["dt"]):
-        day = os.path.relpath(day_folder(plan["dest"], c["dt"]), plan["dest"])
-        kind = "videos" if c["dst"].upper().endswith(".MP4") else (
-            "xml" if c["dst"].upper().endswith(".XML") else "photos")
+    for f in sorted(copied, key=lambda f: f["dt"]):
+        day = os.path.relpath(day_folder(plan["dest"], f["dt"]), plan["dest"])
+        kind = "videos" if f["dst"].upper().endswith(".MP4") else (
+            "xml" if f["dst"].upper().endswith(".XML") else "photos")
         by_day.setdefault(day, {"photos": 0, "videos": 0, "xml": 0})[kind] += 1
     return {"dest": plan["dest"], "copied": copied, "errors": errors,
-            "raw_jpg_pairs": pairs, "by_day": by_day}
+            "raw_jpg_pairs": pairs, "by_day": by_day, "seconds": round(seconds, 1)}
 
 
 def _windows_drive_is_removable(path):
@@ -520,62 +642,103 @@ def trash(paths):
 
 # ---------------------------------------------------------------- printing
 
-def print_detect(info):
-    print("Sony cards found:" if info["cards"] else "No Sony camera card found.")
-    for c in info["cards"]:
-        print(f"  - {c}")
-    if not info["dest"]:
-        print("No backup folder set (use --dest or SONY_IMPORT_DEST).")
-        return
-    if info["dest_drive"]:
-        print(f"Backup drive {info['dest_drive']}: "
-              f"{'connected' if info['dest_drive_connected'] else 'NOT connected'}")
-    if info["dest_drive_connected"]:
-        print(f"Backup folder {info['dest']}: {'exists' if info['dest_exists'] else 'does not exist yet'}")
-
-
-def print_plan(plan):
-    print(f"Destination: {plan['dest']}  ({plan['dest_existing_files']} media files already there)")
-    for s in plan["cards"]:
-        print(f"\nCard {s['card']}")
-        print(f"  On card: {counts(s['photos_on_card'], s['videos_on_card']) or 'nothing'}")
-        print(f"  Already backed up: {counts(s['already_photos'], s['already_videos']) or 'nothing'}")
-        if s["new_photos"] or s["new_videos"]:
-            print(f"  To back up: {counts(s['new_photos'], s['new_videos'])} "
-                  f"({human(s['new_bytes'])})")
-            print(f"  Shot between: {s['from'][:19]}  ->  {s['to'][:19]}")
-        else:
-            print("  Nothing new to back up.")
-    days = {}
-    for it in plan["items"]:  # items are already in capture order
-        day = os.path.relpath(day_folder(plan["dest"], it["dt"]), plan["dest"])
-        d = days.setdefault(day, [0, 0])
-        d[1 if it["kind"] == "video" else 0] += 1 if it["kind"] == "video" else len(it["files"])
-    if days:
-        print("\nDay folders that will receive files:")
-        for day, (p, v) in days.items():
-            print(f"  {day}: {counts(p, v)}")
-
-
 def counts(p, v):
     parts = [f"{p} photo{'s' * (p != 1)}"] if p else []
     parts += [f"{v} video{'s' * (v != 1)}"] if v else []
     return ", ".join(parts)
 
 
+def _mark(kind):
+    if kind == "ok":
+        return paint("✓" if FANCY else "OK", BOLD, GREEN)
+    if kind == "warn":
+        return paint("⚠" if FANCY else "!", BOLD, YELLOW)
+    return paint("✗" if FANCY else "x", BOLD, RED)
+
+
+def _row(name, value, width=19):
+    print("    " + dim(name.ljust(width)) + value)
+
+
+def _day(rel):
+    head, day = os.path.split(rel)
+    return dim(head + os.sep) + paint(day, BOLD, CYAN), len(rel)
+
+
+def print_days(rows):
+    """rows: list of (relative day folder, text). Prints an aligned list."""
+    width = max(len(rel) for rel, _ in rows)
+    for rel, text in rows:
+        styled, n = _day(rel)
+        print("    " + styled + " " * (width - n + 3) + text)
+
+
+def print_detect(info):
+    if info["cards"]:
+        for c in info["cards"]:
+            print(f"  {_mark('ok')} Memory card    " + card_path(c))
+    else:
+        print(f"  {_mark('bad')} Memory card    " + paint("not found", YELLOW))
+    if not info["dest"]:
+        print(f"  {_mark('bad')} Backup folder  " + paint("not set (use --dest or SONY_IMPORT_DEST)", YELLOW))
+        return
+    if info["dest_drive"]:
+        if info["dest_drive_connected"]:
+            print(f"  {_mark('ok')} Backup drive   " + dest_path(info["dest_drive"]))
+        else:
+            print(f"  {_mark('bad')} Backup drive   " + dest_path(info["dest_drive"])
+                  + paint("  not connected", YELLOW))
+    if info["dest_drive_connected"]:
+        state = _mark("ok") if info["dest_exists"] else _mark("warn")
+        note = "" if info["dest_exists"] else paint("  will be created", YELLOW)
+        print(f"  {state} Backup folder  " + dest_path(info["dest"]) + note)
+
+
+def print_plan(plan):
+    print("\n  " + paint("Backup folder", BOLD) + "  " + dest_path(plan["dest"])
+          + dim(f"  {DOT} {plan['dest_existing_files']} files already there"))
+    for s in plan["cards"]:
+        print("\n  " + paint("Memory card", BOLD) + "    " + card_path(s["card"]))
+        _row("On card", counts(s["photos_on_card"], s["videos_on_card"]) or "nothing")
+        already = counts(s["already_photos"], s["already_videos"])
+        _row("Already backed up", paint(already, GREEN) if already else dim("nothing"))
+        if s["new_photos"] or s["new_videos"]:
+            _row("New", paint(counts(s["new_photos"], s["new_videos"]), BOLD, YELLOW)
+                 + dim(f"  {DOT} {human(s['new_bytes'])}"))
+            _row("Shot between", f"{nice_dt(s['from'])}  {dim(ARROW)}  {nice_dt(s['to'])}")
+        else:
+            _row("New", ok("nothing, all backed up"))
+    days = {}
+    for it in plan["items"]:  # items are already in capture order
+        day = os.path.relpath(day_folder(plan["dest"], it["dt"]), plan["dest"])
+        d = days.setdefault(day, [0, 0])
+        d[1 if it["kind"] == "video" else 0] += 1 if it["kind"] == "video" else len(it["files"])
+    if days:
+        print("\n  " + paint("Will be copied into", BOLD))
+        print_days([(day, counts(p, v)) for day, (p, v) in days.items()])
+
+
 def print_report(rep):
-    print(f"\nCopied {len(rep['copied'])} files into {rep['dest']}")
-    for day, c in rep["by_day"].items():
-        print(f"  {day}: {counts(c['photos'], c['videos'])}")
+    print()
+    took = f" in {nice_secs(rep['seconds'])}" if rep.get("seconds", 0) >= 1 else ""
+    photos = sum(c["photos"] for c in rep["by_day"].values())
+    videos = sum(c["videos"] for c in rep["by_day"].values())
+    print("  " + ok(f"Copied {counts(photos, videos).replace(', ', ' and ') or 'nothing'}{took}"))
+    if rep["by_day"]:
+        print_days([(day, counts(c["photos"], c["videos"])) for day, c in rep["by_day"].items()])
     if rep["errors"]:
-        print(f"\n{len(rep['errors'])} ERRORS:")
+        print("\n  " + bad(f"{len(rep['errors'])} could not be copied:"))
         for e in rep["errors"]:
-            print(f"  {e['files']}: {e['error']}")
+            print("    " + paint(os.path.basename(e["files"][0]), RED) + dim(f"  {e['error']}"))
     if rep["raw_jpg_pairs"]:
         n = len(rep["raw_jpg_pairs"])
-        print(f"\n{n} photo{'s were' if n != 1 else ' was'} shot as RAW+JPG:")
+        print("\n  " + warn(f"{n} photo{'s were' if n != 1 else ' was'} shot as RAW + JPG"))
+        rows = []
         for p in rep["raw_jpg_pairs"]:
-            print(f"  {os.path.relpath(p['arw'], rep['dest'])}  +  {os.path.basename(p['jpg'])}")
+            rel = os.path.relpath(p["arw"], rep["dest"])
+            rows.append((os.path.dirname(rel), os.path.splitext(os.path.basename(rel))[0]
+                         + dim("  .ARW + .JPG")))
+        print_days(rows)
 
 
 # ---------------------------------------------------------------- CLI
@@ -587,8 +750,15 @@ def ask(q):
         return ""
 
 
-def yes(q):
-    return ask(q + " [y/n]: ").lower() in ("y", "yes")
+def prompt(question, keys=()):
+    """Ask a question; keys is a list of (key, meaning) shown as coloured hints."""
+    hint = "  ".join(f"{paint('[' + k + ']', BOLD, CYAN)} {meaning}" for k, meaning in keys)
+    arrow = paint("›" if FANCY else ">", BOLD, CYAN)
+    return ask(f"\n  {paint(question, BOLD)}  {hint}  {arrow} ")
+
+
+def yes(question):
+    return prompt(question, [("y", "yes"), ("n", "no")]).lower() in ("y", "yes")
 
 
 def clean_path(text):
@@ -619,21 +789,38 @@ def save_config(cfg):
         pass
 
 
+def banner():
+    title, sub = "SONY IMPORT", "Back up your camera card, sorted by date"
+    ver = f"v{__version__}"
+    width = max(len(title) + len(ver) + 4, len(sub)) + 4
+    if FANCY:
+        edge = paint("│", CYAN)
+        print("\n  " + paint("┌" + "─" * width + "┐", CYAN))
+        gap = width - 2 - len(title) - len(ver)
+        print(f"  {edge}  {paint(title, BOLD, CYAN)}{' ' * (gap - 2)}{dim(ver)}  {edge}")
+        print(f"  {edge}  {dim(sub)}{' ' * (width - 2 - len(sub))}{edge}")
+        print("  " + paint("└" + "─" * width + "┘", CYAN))
+    else:
+        print(f"\n  {paint(title, BOLD, CYAN)}  {dim(ver)}\n  {dim(sub)}")
+
+
 def choose_dest(current):
     example = "E:\\Photos\\Sony Backup" if IS_WIN else "/Volumes/MySSD/Photos/Sony Backup"
-    print("\nWhere should the backup go? Type the folder path, or drag the folder into this window.")
+    print("\n  " + paint("Where should the backup go?", BOLD))
+    print("  " + dim("Type the folder path, or drag the folder into this window, then press Enter."))
     if current:
-        print(f"Press Enter to keep: {current}")
+        print("  " + dim("Press Enter to keep ") + dest_path(current))
     else:
-        print(f"Example: {example}")
-    a = ask("Backup folder: ")
+        print("  " + dim("Example: " + example))
+    a = ask("  " + paint("›" if FANCY else ">", BOLD, CYAN) + " ")
     return clean_path(a) if a else current
 
 
+STEPS = 4
+
+
 def interactive(dest):
-    print("=" * 60)
-    print("  Sony Import: back up your camera card by date")
-    print("=" * 60)
+    banner()
     cfg = load_config()
     dest = dest or cfg.get("dest")
     if not dest:
@@ -641,62 +828,66 @@ def interactive(dest):
         if not dest:
             return 0
 
+    step(1, STEPS, "Connect")
     while True:  # wait until the card and the backup drive are both plugged in
         info = detect(dest)
-        missing = []
-        if not info["cards"]:
-            missing.append("a Sony camera memory card")
-        if not info["dest_drive_connected"]:
-            missing.append(f"the backup drive ({info['dest_drive']})")
-        if not missing:
+        print_detect(info)
+        if info["cards"] and info["dest_drive_connected"]:
             break
-        print("\nNot connected: " + " and ".join(missing) + ".")
-        a = ask("Plug it in and press Enter to check again, or type q to quit: ")
+        a = prompt("Plug it in, then press Enter to check again.", [("q", "quit")])
         if a.lower() == "q":
             return 1
+        print()
 
-    while True:  # confirm source and destination
-        print("\nCopy FROM (memory card):")
+    step(2, STEPS, "Confirm")
+    while True:
         for c in info["cards"]:
-            print(f"   {c}")
-        print(f"Copy TO (backup folder):\n   {dest}")
-        a = ask("\nIs this right? [y = yes / c = change backup folder / q = quit]: ").lower()
+            print("  " + dim("From ") + " " + card_path(c) + dim("   memory card"))
+        print("  " + dim("To   ") + " " + dest_path(dest) + dim("   backup folder"))
+        a = prompt("Is this right?", [("y", "yes"), ("c", "change folder"), ("q", "quit")]).lower()
         if a in ("q", "n", "no"):
             return 0
         if a in ("y", "yes"):
+            drive = drive_of(dest)
+            if drive and not os.path.isdir(drive):
+                print("\n  " + warn(f"The drive {drive} is not connected. Plug it in or pick another folder."))
+                print()
+                continue
             break
         if a == "c":
             dest = choose_dest(dest)
-            drive = drive_of(dest)
-            if drive and not os.path.isdir(drive):
-                print(f"That drive ({drive}) is not connected.")
+            print()
 
     if not os.path.isdir(dest):
-        if not yes(f"\nThe folder {dest} does not exist. Create it?"):
+        if not yes(f"The folder does not exist yet. Create it?"):
             return 0
         os.makedirs(dest)
     save_config({**cfg, "dest": dest})
 
-    print("\nChecking what is already backed up (this can take a minute)...")
+    step(3, STEPS, "Check what's new")
     plan = build_plan(dest, info["cards"])
-    print()
     print_plan(plan)
     if not plan["items"]:
-        print("\nEverything on the card is already backed up.")
+        print("\n  " + ok("Everything on the card is already backed up. Nothing to do."))
         return 0
-    if not yes("\nStart copying?"):
+    if not yes("Start copying?"):
         return 0
-    print()
+
+    step(4, STEPS, "Copy")
     rep = run_import(plan)
     print_report(rep)
-    if rep["raw_jpg_pairs"] and yes(f"\nYou have the RAW file for these, so the JPGs are extra copies.\n"
-                                    f"Move these JPGs to the {TRASH}?"):
-        try:
-            moved = trash([p["jpg"] for p in rep["raw_jpg_pairs"]])
-            print(f"Moved {len(moved)} JPGs to the {TRASH}.")
-        except Exception as e:
-            print(f"Could not move the JPGs: {e}")
-    print("\nAll done. It is now safe to remove the card.")
+    if rep["raw_jpg_pairs"]:
+        print("  " + dim("You have the RAW file for each of these, so the JPGs are extra copies."))
+        if yes(f"Move these JPGs to the {TRASH}?"):
+            try:
+                moved = trash([p["jpg"] for p in rep["raw_jpg_pairs"]])
+                print("\n  " + ok(f"Moved {len(moved)} JPGs to the {TRASH}. You can restore them from there."))
+            except Exception as e:
+                print("\n  " + bad(f"Could not move the JPGs: {e}"))
+    if rep["errors"]:
+        print("\n  " + bad("Some files were not copied. Run Sony Import again to retry them."))
+    else:
+        print("\n  " + ok("All done. You can safely remove the memory card."))
     return 1 if rep["errors"] else 0
 
 
@@ -706,15 +897,16 @@ def run_interactive(dest):
     try:
         code = interactive(dest)
     except KeyboardInterrupt:
-        print("\n\nStopped. Nothing half-copied was left behind; run again to finish.")
+        print("\n\n  " + warn("Stopped. Nothing half-copied was left behind; run again to finish."))
     except Exception as e:
-        print(f"\n\nSomething went wrong: {e}")
-    ask("\nPress Enter to close this window.")
+        print("\n\n  " + bad(f"Something went wrong: {e}"))
+    ask("\n  " + dim("Press Enter to close this window."))
     return code
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--version", action="version", version=f"sony-import {__version__}")
     ap.add_argument("--dest", default=DEFAULT_DEST, help="backup folder (interactive mode)")
     sub = ap.add_subparsers(dest="cmd")
     p = sub.add_parser("detect")

@@ -5,6 +5,10 @@ neatly sorted into **Year → Month → Day** folders. Run it again any time: it
 
 **Works on Windows, macOS and Linux. Nothing to install: download one file and double-click it.**
 
+<p align="center"><img src="docs/screenshot.png" alt="Sony Import checking a memory card before copying" width="720"></p>
+
+The result on your drive looks like this:
+
 ```
 Sony Backup/
 ├── 2026/
