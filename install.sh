@@ -45,11 +45,14 @@ case "$(uname -s)" in
     unzip -q "$tmp/app.zip" -d "$tmp" || fail "Could not unpack the download"
     version="$("$tmp/sony-import" --version 2>/dev/null | awk '{print $2}')" || version=""
 
-    apps="${SONY_IMPORT_APPS_DIR:-/Applications}"
-    if ! { [ -d "$apps" ] && [ -w "$apps" ]; }; then
-      apps="$HOME/Applications"
+    if [ -n "${SONY_IMPORT_APPS_DIR:-}" ]; then
+      apps="$SONY_IMPORT_APPS_DIR"          # explicit choice: create it if needed
+    elif [ -w /Applications ]; then
+      apps="/Applications"
+    else
+      apps="$HOME/Applications"             # no admin rights: per-user Applications folder
     fi
-    mkdir -p "$apps"
+    mkdir -p "$apps" || fail "Could not create $apps"
     app="$apps/Sony Import.app"
     step "Installing to $app ..."
     rm -rf "$app"
