@@ -28,7 +28,7 @@ import sys
 import time
 from datetime import datetime
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 IS_WIN = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
 TRASH = "Recycle Bin" if IS_WIN else "Trash"
@@ -360,23 +360,25 @@ def read_item(it):
         it["dt"] = video_datetime(it["key_file"], it["files"][1] if len(it["files"]) > 1 else None)
     else:
         it["dt"] = photo_datetime(it["key_file"])
-    it["size"] = sum(os.path.getsize(p) for p in it["files"])
-    it["key_size"] = os.path.getsize(it["key_file"])
-    it["fp"] = fingerprint(it["key_file"])
+    it["sizes"] = [os.path.getsize(p) for p in it["files"]]
+    it["fps"] = [fingerprint(p) for p in it["files"]]
+    it["size"] = sum(it["sizes"])
+    k = it["files"].index(it["key_file"])
+    it["key"] = (it["sizes"][k], it["fps"][k])
 
 
 # ---------------------------------------------------------------- destination scan
 
 class DestIndex:
-    """Files already in the destination, matched by size then capture time."""
+    """Files already in the destination, matched one by one by size + content fingerprint.
+    Names and dates in the backup don't matter, so renamed or re-dated files still match."""
 
     def __init__(self, dest):
         self.dest = dest
         self.by_size = {}
         self.max_photo = 0
         self.max_video = 0
-        self.file_count = 0
-        self._dt_cache = {}
+        self.file_count = 0  # photos + videos, for display
         self._fp_cache = {}
         if not os.path.isdir(dest):
             return
@@ -386,38 +388,29 @@ class DestIndex:
                 if fn.startswith("."):
                     continue
                 ext = os.path.splitext(fn)[1].upper()
-                if ext not in PHOTO_EXT and ext != ".MP4":
+                if ext not in PHOTO_EXT and ext not in (".MP4", ".XML"):
                     continue
                 p = os.path.join(dirpath, fn)
-                self.file_count += 1
                 self.by_size.setdefault(os.path.getsize(p), []).append(p)
+                if ext != ".XML":
+                    self.file_count += 1
                 m = re.match(r"^DSC(\d+)", fn, re.I)
                 if m and ext in PHOTO_EXT:
                     self.max_photo = max(self.max_photo, int(m.group(1)))
                 m = re.match(r"^C(\d+)", fn, re.I)
-                if m and ext == ".MP4":
+                if m and ext in (".MP4", ".XML"):  # count orphan XMLs too, so numbers never collide
                     self.max_video = max(self.max_video, int(m.group(1)))
 
-    def _dt(self, p):
-        if p not in self._dt_cache:
-            if p.upper().endswith(".MP4"):
-                self._dt_cache[p] = video_datetime(p, video_xml_for(p))
-            else:
-                self._dt_cache[p] = photo_datetime(p)
-        return self._dt_cache[p]
-
-    def _fp(self, p):
-        if p not in self._fp_cache:
-            self._fp_cache[p] = fingerprint(p)
-        return self._fp_cache[p]
-
-    def contains(self, item):
-        ext = os.path.splitext(item["key_file"])[1].upper()
-        for p in self.by_size.get(item["key_size"], []):
-            if (os.path.splitext(p)[1].upper() == ext and self._dt(p) == item["dt"]
-                    and self._fp(p) == item["fp"]):
-                return True
-        return False
+    def find(self, size, fp, ext):
+        """Path of the backed-up copy of a card file, or None."""
+        for p in self.by_size.get(size, []):
+            if os.path.splitext(p)[1].upper() != ext:
+                continue
+            if p not in self._fp_cache:
+                self._fp_cache[p] = fingerprint(p)
+            if self._fp_cache[p] == fp:
+                return p
+        return None
 
 
 # ---------------------------------------------------------------- planning
@@ -428,27 +421,84 @@ def day_folder(dest, dt):
                         f"{d.day:02d}{MONTHS[d.month][:3]}{d.year % 100:02d}")
 
 
+def item_counts(it):
+    """(photos, videos, lone XMLs) that this item will copy."""
+    up = [f.upper() for f in it["files"]]
+    videos = sum(f.endswith(".MP4") for f in up)
+    xmls = sum(f.endswith(".XML") for f in up)
+    return len(up) - videos - xmls, videos, xmls if not videos else 0
+
+
+def companion_target(found, src):
+    """Where a missing half goes: next to its backed-up partner, with the partner's number.
+    C00005.MP4 <-> C00005M01.XML, DSC00007.JPG <-> DSC00007.ARW."""
+    folder, name = os.path.split(found)
+    stem, ext = os.path.splitext(name)
+    if ext.upper() == ".XML" and stem.upper().endswith("M01"):
+        stem = stem[:-3]
+    src_ext = os.path.splitext(src)[1].upper()
+    return os.path.join(folder, stem + ("M01.XML" if src_ext == ".XML" else src_ext))
+
+
+def check_item(it, index):
+    """Return ('done', None) | ('new', None) | ('fill', [(src, target), ...])."""
+    exts = [os.path.splitext(f)[1].upper() for f in it["files"]]
+    found = [index.find(sz, fp, ext) for sz, fp, ext in zip(it["sizes"], it["fps"], exts)]
+    if it["kind"] == "pair":
+        jpg, arw = found  # files are [JPG, ARW]
+        if arw:
+            return "done", None  # JPG may have been moved to the Trash on purpose
+        if jpg:
+            return "fill", [(it["files"][1], companion_target(jpg, it["files"][1]))]
+        return "new", None
+    if all(found):
+        return "done", None
+    if any(found):
+        anchor = next(f for f in found if f)
+        return "fill", [(src, companion_target(anchor, src))
+                        for src, f in zip(it["files"], found) if not f]
+    return "new", None
+
+
 def build_plan(dest, cards):
     index = DestIndex(dest)
-    new, seen_keys, per_card = [], set(), {}
+    new, fills, seen_keys, per_card = [], [], set(), {}
     listed = [(card, scan_card(card)) for card in cards]
     bar = Bar(sum(len(items) for _, items in listed), "Checking", CYAN)
     for card, items in listed:
         stats = {"card": card, "photos_on_card": 0, "videos_on_card": 0,
                  "already_photos": 0, "already_videos": 0, "new_photos": 0, "new_videos": 0,
-                 "new_bytes": 0, "from": None, "to": None}
+                 "new_xml": 0, "repairs": 0, "new_bytes": 0, "from": None, "to": None}
         for it in items:
             read_item(it)
             bar.update(1)
             is_video = it["kind"] == "video"
-            stats["videos_on_card" if is_video else "photos_on_card"] += len(it["files"]) if not is_video else 1
-            key = (it["key_size"], it["dt"], it["fp"])
-            if key in seen_keys or index.contains(it):
-                stats["already_videos" if is_video else "already_photos"] += 1 if is_video else len(it["files"])
+            on_card = 1 if is_video else len(it["files"])
+            stats["videos_on_card" if is_video else "photos_on_card"] += on_card
+            state, copies = ("done", None) if it["key"] in seen_keys else check_item(it, index)
+            seen_keys.add(it["key"])
+            if state == "done":
+                stats["already_videos" if is_video else "already_photos"] += on_card
                 continue
-            seen_keys.add(key)
-            new.append(it)
-            stats["new_videos" if is_video else "new_photos"] += 1 if is_video else len(it["files"])
+            if state == "fill":
+                srcs = [src for src, _ in copies]
+                sizes = dict(zip(it["files"], it["sizes"]))
+                it = dict(it, files=srcs, targets=[t for _, t in copies],
+                          size=sum(sizes[f] for f in srcs), repair=True)
+                if it["kind"] == "pair":
+                    it["pair"] = (it["targets"][0], companion_target(it["targets"][0], "x.JPG"))
+                fills.append(it)
+                stats["repairs"] += len(srcs)
+                if is_video:
+                    stats["already_videos"] += 0 if any(f.upper().endswith(".MP4") for f in srcs) else 1
+                else:
+                    stats["already_photos"] += on_card - len(srcs)
+            else:
+                new.append(it)
+            p, v, x = item_counts(it)
+            stats["new_photos"] += p
+            stats["new_videos"] += v
+            stats["new_xml"] += x
             stats["new_bytes"] += it["size"]
             stats["from"] = min(filter(None, [stats["from"], it["dt"]]))
             stats["to"] = max(filter(None, [stats["to"], it["dt"]]))
@@ -461,20 +511,19 @@ def build_plan(dest, cards):
         if it["kind"] == "video":
             video_n += 1
             base = f"C{video_n:0{NUM_WIDTH}d}"
-            it["targets"] = []
-            for src in it["files"]:
-                if src.upper().endswith(".MP4"):
-                    name = base + ".MP4"
-                else:
-                    name = base + "M01.XML"
-                it["targets"].append(os.path.join(folder, "Videos", name))
+            it["targets"] = [os.path.join(folder, "Videos", base + (".MP4" if src.upper().endswith(".MP4")
+                                                                    else "M01.XML"))
+                             for src in it["files"]]
         else:
             photo_n += 1
             base = f"DSC{photo_n:0{NUM_WIDTH}d}"
             it["targets"] = [os.path.join(folder, base + os.path.splitext(s)[1].upper())
                              for s in it["files"]]
+            if it["kind"] == "pair":
+                it["pair"] = (it["targets"][1], it["targets"][0])
+    items = sorted(new + fills, key=lambda it: (it["dt"], it["key_file"]))
     return {"dest": dest, "dest_existing_files": index.file_count,
-            "cards": list(per_card.values()), "items": new}
+            "cards": list(per_card.values()), "items": items}
 
 
 # ---------------------------------------------------------------- copying
@@ -578,7 +627,7 @@ def run_import(plan):
     total_files = sum(len(it["files"]) for it in items)
     progress = Bar(sum(it["size"] for it in items), "Copying", GREEN, nbytes=True,
                    files_total=total_files, log=True)
-    copied, errors, pairs = [], [], []
+    copied, errors, pairs, done = [], [], [], []
     for it in items:
         try:
             for src, dst in zip(it["files"], it["targets"]):
@@ -586,19 +635,17 @@ def run_import(plan):
                     raise IOError(f"target already exists: {dst}")
                 copy_file(src, dst, progress)
                 copied.append({"src": src, "dst": dst, "dt": it["dt"]})
-            if it["kind"] == "pair":
-                jpg = next(t for t in it["targets"] if t.upper().endswith((".JPG", ".JPEG")))
-                arw = next(t for t in it["targets"] if t.upper().endswith(".ARW"))
-                pairs.append({"arw": arw, "jpg": jpg})
+            if "pair" in it:
+                pairs.append({"arw": it["pair"][0], "jpg": it["pair"][1]})
+            done.append(it)
         except Exception as e:
             errors.append({"files": it["files"], "error": str(e)})
     seconds = progress.finish()
     by_day = {}
-    for f in sorted(copied, key=lambda f: f["dt"]):
-        day = os.path.relpath(day_folder(plan["dest"], f["dt"]), plan["dest"])
-        kind = "videos" if f["dst"].upper().endswith(".MP4") else (
-            "xml" if f["dst"].upper().endswith(".XML") else "photos")
-        by_day.setdefault(day, {"photos": 0, "videos": 0, "xml": 0})[kind] += 1
+    for it in done:  # already in capture order
+        day = by_day.setdefault(item_folder(plan["dest"], it), {"photos": 0, "videos": 0, "xml": 0})
+        for key, n in zip(("photos", "videos", "xml"), item_counts(it)):
+            day[key] += n
     return {"dest": plan["dest"], "copied": copied, "errors": errors,
             "raw_jpg_pairs": pairs, "by_day": by_day, "seconds": round(seconds, 1)}
 
@@ -642,10 +689,19 @@ def trash(paths):
 
 # ---------------------------------------------------------------- printing
 
-def counts(p, v):
+def counts(p, v, x=0):
     parts = [f"{p} photo{'s' * (p != 1)}"] if p else []
     parts += [f"{v} video{'s' * (v != 1)}"] if v else []
+    parts += [f"{x} video info file{'s' * (x != 1)} (.XML)"] if x else []
     return ", ".join(parts)
+
+
+def item_folder(dest, it):
+    """Day folder (relative) an item goes into."""
+    folder = os.path.dirname(it["targets"][0])
+    if os.path.basename(folder) == "Videos":
+        folder = os.path.dirname(folder)
+    return os.path.relpath(folder, dest)
 
 
 def _mark(kind):
@@ -702,30 +758,33 @@ def print_plan(plan):
         _row("On card", counts(s["photos_on_card"], s["videos_on_card"]) or "nothing")
         already = counts(s["already_photos"], s["already_videos"])
         _row("Already backed up", paint(already, GREEN) if already else dim("nothing"))
-        if s["new_photos"] or s["new_videos"]:
-            _row("New", paint(counts(s["new_photos"], s["new_videos"]), BOLD, YELLOW)
+        if s["new_photos"] or s["new_videos"] or s["new_xml"]:
+            _row("New", paint(counts(s["new_photos"], s["new_videos"], s["new_xml"]), BOLD, YELLOW)
                  + dim(f"  {DOT} {human(s['new_bytes'])}"))
+            if s["repairs"]:
+                n = s["repairs"]
+                _row("", dim(f"incl. {n} file{'s' * (n != 1)} missing from an earlier backup, "
+                             f"put back next to {'their' if n != 1 else 'its'} partner"))
             _row("Shot between", f"{nice_dt(s['from'])}  {dim(ARROW)}  {nice_dt(s['to'])}")
         else:
             _row("New", ok("nothing, all backed up"))
     days = {}
     for it in plan["items"]:  # items are already in capture order
-        day = os.path.relpath(day_folder(plan["dest"], it["dt"]), plan["dest"])
-        d = days.setdefault(day, [0, 0])
-        d[1 if it["kind"] == "video" else 0] += 1 if it["kind"] == "video" else len(it["files"])
+        d = days.setdefault(item_folder(plan["dest"], it), [0, 0, 0])
+        for i, n in enumerate(item_counts(it)):
+            d[i] += n
     if days:
         print("\n  " + paint("Will be copied into", BOLD))
-        print_days([(day, counts(p, v)) for day, (p, v) in days.items()])
+        print_days([(day, counts(*c)) for day, c in days.items()])
 
 
 def print_report(rep):
     print()
     took = f" in {nice_secs(rep['seconds'])}" if rep.get("seconds", 0) >= 1 else ""
-    photos = sum(c["photos"] for c in rep["by_day"].values())
-    videos = sum(c["videos"] for c in rep["by_day"].values())
-    print("  " + ok(f"Copied {counts(photos, videos).replace(', ', ' and ') or 'nothing'}{took}"))
+    tot = [sum(c[k] for c in rep["by_day"].values()) for k in ("photos", "videos", "xml")]
+    print("  " + ok(f"Copied {counts(*tot).replace(', ', ' and ') or 'nothing'}{took}"))
     if rep["by_day"]:
-        print_days([(day, counts(c["photos"], c["videos"])) for day, c in rep["by_day"].items()])
+        print_days([(day, counts(c["photos"], c["videos"], c["xml"])) for day, c in rep["by_day"].items()])
     if rep["errors"]:
         print("\n  " + bad(f"{len(rep['errors'])} could not be copied:"))
         for e in rep["errors"]:
@@ -804,31 +863,52 @@ def banner():
         print(f"\n  {paint(title, BOLD, CYAN)}  {dim(ver)}\n  {dim(sub)}")
 
 
-def choose_dest(current):
-    example = "E:\\Photos\\Sony Backup" if IS_WIN else "/Volumes/MySSD/Photos/Sony Backup"
-    print("\n  " + paint("Where should the backup go?", BOLD))
-    print("  " + dim("Type the folder path, or drag the folder into this window, then press Enter."))
-    if current:
-        print("  " + dim("Press Enter to keep ") + dest_path(current))
+def choose_dest(last, keep_text="Or just press Enter to use the same folder as last time: "):
+    """Ask for the backup folder. Nothing is assumed: the user drags or types it.
+    The folder used last time is offered, but only used if the user presses Enter."""
+    if IS_WIN:
+        example = "D:\\Camera Backup"
+    elif IS_MAC:
+        example = "/Volumes/MyDrive/Camera Backup"
     else:
-        print("  " + dim("Example: " + example))
-    a = ask("  " + paint("›" if FANCY else ">", BOLD, CYAN) + " ")
-    return clean_path(a) if a else current
+        example = "/media/you/MyDrive/Camera Backup"
+    print("  " + paint("Where should the backup go?", BOLD))
+    print("  " + dim("Drag the folder into this window (or type its path), then press Enter."))
+    print("  " + dim("Pick any folder you like, for example ") + dim(example))
+    if last:
+        print("  " + dim(keep_text) + dest_path(last))
+    while True:
+        a = ask("  " + paint("›" if FANCY else ">", BOLD, CYAN) + " ")
+        if a.lower() == "q":
+            return None
+        if not a:
+            if last:
+                return last
+            print("  " + warn("Please drag in or type a folder (or type q to quit)."))
+            continue
+        path = clean_path(a)
+        if os.path.exists(path) and not os.path.isdir(path):
+            print("  " + warn("That is a file, not a folder. Please choose a folder."))
+            continue
+        return path
 
 
-STEPS = 4
+STEPS = 5
 
 
 def interactive(dest):
+    """dest is only set when given on the command line (--dest); otherwise the user chooses."""
     banner()
     cfg = load_config()
-    dest = dest or cfg.get("dest")
-    if not dest:
-        dest = choose_dest(None)
+    step(1, STEPS, "Backup folder")
+    if dest:
+        print("  " + dim("Backup folder given on the command line: ") + dest_path(dest))
+    else:
+        dest = choose_dest(cfg.get("dest"))
         if not dest:
             return 0
 
-    step(1, STEPS, "Connect")
+    step(2, STEPS, "Connect")
     while True:  # wait until the card and the backup drive are both plugged in
         info = detect(dest)
         print_detect(info)
@@ -839,7 +919,7 @@ def interactive(dest):
             return 1
         print()
 
-    step(2, STEPS, "Confirm")
+    step(3, STEPS, "Confirm")
     while True:
         for c in info["cards"]:
             print("  " + dim("From ") + " " + card_path(c) + dim("   memory card"))
@@ -855,7 +935,8 @@ def interactive(dest):
                 continue
             break
         if a == "c":
-            dest = choose_dest(dest)
+            print()
+            dest = choose_dest(dest, "Or just press Enter to keep: ")
             print()
 
     if not os.path.isdir(dest):
@@ -864,7 +945,7 @@ def interactive(dest):
         os.makedirs(dest)
     save_config({**cfg, "dest": dest})
 
-    step(3, STEPS, "Check what's new")
+    step(4, STEPS, "Check what's new")
     plan = build_plan(dest, info["cards"])
     print_plan(plan)
     if not plan["items"]:
@@ -873,7 +954,7 @@ def interactive(dest):
     if not yes("Start copying?"):
         return 0
 
-    step(4, STEPS, "Copy")
+    step(5, STEPS, "Copy")
     rep = run_import(plan)
     print_report(rep)
     if rep["raw_jpg_pairs"]:
@@ -907,7 +988,7 @@ def run_interactive(dest):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--version", action="version", version=f"sony-import {__version__}")
-    ap.add_argument("--dest", default=DEFAULT_DEST, help="backup folder (interactive mode)")
+    ap.add_argument("--dest", help="backup folder (interactive mode asks if not given)")
     sub = ap.add_subparsers(dest="cmd")
     p = sub.add_parser("detect")
     p.add_argument("--dest", default=DEFAULT_DEST)

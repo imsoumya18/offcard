@@ -10,7 +10,7 @@ neatly sorted into **Year → Month → Day** folders. Run it again any time: it
 The result on your drive looks like this:
 
 ```
-Sony Backup/
+Camera Backup/          ← any folder you choose
 ├── 2026/
 │   ├── 9. September/
 │   │   ├── 05Sep26/
@@ -53,16 +53,18 @@ The app isn't signed with a paid Apple or Microsoft certificate, so your compute
 ## How to use it
 
 1. Put the camera's memory card in your computer, and plug in the drive you back up to (if you use one).
-2. Double-click **sony-import**. A window opens and asks you a few simple questions:
-   1. **Where should the backup go?** Type the folder, or simply **drag the folder into the window**
-      and press Enter. It remembers your answer for next time.
-   2. **Copy from / copy to:** checks that both the card and the backup drive are plugged in. If
-      one is missing it tells you, and waits while you plug it in.
-   3. **What's new:** how many photos and videos aren't backed up yet, how big they are, and which
-      dates they're from.
-   4. **Start copying?** Type `y` and watch the progress bar go to 100%.
-   5. **Shot in RAW + JPG?** It lists those photos and offers to move the extra JPG copies to the
-      Trash / Recycle Bin. You can always get them back from there.
+2. Double-click **sony-import**. A window opens and walks you through five steps:
+   1. **Backup folder:** choose where your photos should go. **Drag the folder into the window**
+      (or type its path) and press Enter. It can be any folder on any drive. Next time it offers
+      the same folder again, and you just press Enter to reuse it.
+   2. **Connect:** checks that both the card and the backup drive are plugged in. If one is
+      missing it tells you, and waits while you plug it in.
+   3. **Confirm:** shows where it will copy from and to, so you can change the folder if needed.
+   4. **Check what's new:** how many photos and videos aren't backed up yet, how big they are,
+      and which dates they're from.
+   5. **Copy:** type `y` and watch the progress bar go to 100%. If you shot RAW + JPG, it lists
+      those photos and offers to move the extra JPG copies to the Trash / Recycle Bin. You can
+      always get them back from there.
 3. When it says **All done**, you can safely eject the card.
 
 ## What it does (and doesn't)
@@ -72,6 +74,9 @@ The app isn't signed with a paid Apple or Microsoft certificate, so your compute
   no photos gets no folder. Videos go into a `Videos` folder inside their day.
 - **No duplicates.** Each time, it checks what's already in your backup folder and skips it, even if
   you renamed files there or are using several memory cards.
+- **Fills gaps.** It checks every file on its own. If a video's `.XML` file is missing from the
+  backup, it puts back just the `.XML` next to its video, with the same number. The same goes for
+  a video whose `.MP4` is missing, or the RAW half of a RAW + JPG photo.
 - **One clean numbering.** Sony restarts its file numbers on every card, so the same name can turn
   up twice. Imported files are renamed in shooting order: `DSC00001`, `DSC00002`… for photos and
   `C00001`… for videos. Numbering continues from the highest number already in the backup.
@@ -99,7 +104,8 @@ The whole tool is one Python file, [`sony-import.py`](sony-import.py), using onl
 library (Python 3.8+). You can run it directly instead of downloading the app:
 
 ```bash
-python3 sony-import.py --dest "/Volumes/MySSD/Photos/Sony Backup"   # interactive
+python3 sony-import.py                       # interactive: asks for the backup folder
+python3 sony-import.py --dest "/path/to/backup"   # interactive, folder given up front
 ```
 
 There are also non-interactive subcommands for scripting:
@@ -111,7 +117,8 @@ python3 sony-import.py import --dest "$DEST" --report r.json # copy, write a JSO
 python3 sony-import.py trash-jpgs --report r.json            # move JPGs that have an ARW twin to the Trash
 ```
 
-- **Backup folder:** `--dest` can be replaced by setting the `SONY_IMPORT_DEST` environment variable.
+- **Backup folder:** the subcommands need `--dest`, or the `SONY_IMPORT_DEST` environment variable.
+  Interactive mode always asks unless `--dest` is given.
 - **Choosing cards:** `--card PATH` (repeatable) picks specific cards. Otherwise every connected Sony card is used.
 - **JSON output:** `--json` gives machine-readable output for `detect` and `plan`.
 
@@ -125,14 +132,19 @@ python3 sony-import.py trash-jpgs --report r.json            # move JPGs that ha
 - **Dates.**
   - Photos: EXIF `DateTimeOriginal`, read by a small built-in parser, so no exiftool is needed.
   - Videos: the `CreationDate` in Sony's XML file.
-- **Duplicate check.** There is no database. The backup folder is scanned each run, and files are
-  matched by size, capture time and a hash of three 64 KB samples. Size and time alone aren't
-  unique, because Sony's compressed RAW files are all the same size and burst shots share a second.
+- **Duplicate check.** There is no database. The backup folder is scanned each run, and every
+  card file is matched on its own by size and a hash of three 64 KB samples (start, middle, end).
+  Names and dates aren't used, so renamed files still match. Size alone isn't enough, because
+  Sony's compressed RAW files are all the same size.
+- **Pairs.** A video (`.MP4` + `.XML`) or a RAW + JPG photo that is only half backed up gets the
+  missing half copied next to the half that's there, under the same number. The exception: a JPG
+  whose RAW is backed up is treated as removed on purpose (the Trash option), so it isn't copied back.
 - **Copying.** Each file is written as `*.partial`, its size is checked, and then it's renamed into
   place. The original file timestamp is kept.
 - **Trash.** Uses Finder on macOS, the Recycle Bin via PowerShell on Windows (refused on removable
   drives, which have no Recycle Bin), and `gio trash` / `trash-cli` on Linux.
-- **Saved settings.** The last backup folder is stored in `~/.sony-import.json`.
+- **Saved settings.** The last chosen backup folder is stored in `~/.sony-import.json`. It is only
+  offered as the Enter shortcut, never used without asking.
 
 ### Building and releasing
 

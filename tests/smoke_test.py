@@ -72,6 +72,33 @@ def run(cmd):
     return r.stdout
 
 
+def tree(dest):
+    got = set()
+    for dirpath, _, files in os.walk(dest):
+        for fn in files:
+            got.add(tuple(os.path.relpath(os.path.join(dirpath, fn), dest).split(os.sep)))
+    return got
+
+
+def check_tree(dest, what):
+    got = tree(dest)
+    if got != EXPECTED:
+        sys.exit(f"FAIL ({what}): unexpected backup tree\n  missing: {EXPECTED - got}\n  extra: {got - EXPECTED}")
+
+
+def new_items(tool, dest, card):
+    return json.loads(run(tool + ["plan", "--dest", dest, "--card", card, "--json"]))["new_items"]
+
+
+DAY = ("2026", "1. January", "05Jan26")
+# A file deleted from the backup -> the next run must put back exactly that file, same name.
+REPAIRS = [
+    DAY + ("Videos", "C00001M01.XML"),   # video there, its XML missing
+    DAY + ("Videos", "C00001.MP4"),      # XML there, its video missing
+    DAY + ("DSC00001.ARW",),             # JPG of a RAW+JPG pair there, RAW missing
+]
+
+
 def main():
     tool = sys.argv[1:]
     if not tool:
@@ -82,15 +109,35 @@ def main():
         make_card(card)
         run(tool + ["plan", "--dest", dest, "--card", card])
         run(tool + ["import", "--dest", dest, "--card", card])
-        got = set()
-        for dirpath, _, files in os.walk(dest):
-            for fn in files:
-                got.add(tuple(os.path.relpath(os.path.join(dirpath, fn), dest).split(os.sep)))
-        if got != EXPECTED:
-            sys.exit(f"FAIL: unexpected backup tree\n  missing: {EXPECTED - got}\n  extra: {got - EXPECTED}")
-        out = run(tool + ["plan", "--dest", dest, "--card", card, "--json"])
-        if json.loads(out)["new_items"] != 0:
+        check_tree(dest, "first import")
+        if new_items(tool, dest, card) != 0:
             sys.exit("FAIL: second run wants to copy files again")
+
+        for rel in REPAIRS:
+            os.remove(os.path.join(dest, *rel))
+            run(tool + ["import", "--dest", dest, "--card", card])
+            check_tree(dest, "after deleting " + "/".join(rel))
+
+        # A single photo deleted -> copied back once (it has no partner to take a number from,
+        # so it gets the next free number).
+        feb = os.path.join(dest, "2026", "2. February", "10Feb26")
+        os.remove(os.path.join(feb, "DSC00003.ARW"))
+        run(tool + ["import", "--dest", dest, "--card", card])
+        if sorted(os.listdir(feb)) != ["DSC00002.ARW", "DSC00004.ARW", "DSC00005.ARW"]:
+            sys.exit(f"FAIL: deleted single photo not restored exactly once: {sorted(os.listdir(feb))}")
+        if new_items(tool, dest, card) != 0:
+            sys.exit("FAIL: restored photo would be copied again")
+
+        # Renamed in the backup -> still recognised, nothing copied.
+        os.rename(os.path.join(dest, *DAY, "DSC00001.ARW"), os.path.join(dest, *DAY, "renamed.ARW"))
+        if new_items(tool, dest, card) != 0:
+            sys.exit("FAIL: a renamed backup file was not recognised")
+        os.rename(os.path.join(dest, *DAY, "renamed.ARW"), os.path.join(dest, *DAY, "DSC00001.ARW"))
+
+        # JPG of a RAW+JPG pair removed on purpose (the Trash option) -> not brought back.
+        os.remove(os.path.join(dest, *DAY, "DSC00001.JPG"))
+        if new_items(tool, dest, card) != 0:
+            sys.exit("FAIL: a JPG that was removed on purpose would be copied again")
     print("PASS")
 
 
