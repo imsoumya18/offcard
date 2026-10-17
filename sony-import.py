@@ -43,8 +43,13 @@ CHUNK = 8 * 1024 * 1024
 
 
 # ---------------------------------------------------------------- style
-# Colour carries meaning: magenta = memory card, cyan = backup folder / structure,
-# green = done & safe, yellow = needs attention, red = errors, dim = secondary detail.
+# Colour carries meaning, and every colour is readable on both dark and light terminals
+# (contrast >= ~3.5:1 on black and on white; macOS Terminal's default theme is white):
+#   teal   = structure: banner, step headings, both progress bars, prompt keys
+#   orange = needs attention: new files, warnings, missing drives
+#   green  = success: ticks, already backed up, copied, all done
+#   red    = errors only
+#   bold default text = content (paths, day folders); dim = labels and secondary detail
 
 def _enable_color():
     if os.environ.get("NO_COLOR") or not sys.stdout.isatty() or os.environ.get("TERM") == "dumb":
@@ -70,7 +75,11 @@ def _can_print(text):
 
 COLOR = _enable_color()
 FANCY = _can_print("█░✓✗⚠→·─┌┐└┘│›")
-BOLD, DIM, RED, GREEN, YELLOW, MAGENTA, CYAN = "1", "2", "31", "32", "33", "35", "36"
+BOLD, DIM = "1", "2"
+ACCENT = "38;5;30"   # teal   #008787
+ATTN = "38;5;166"    # orange #d75f00
+GOOD = "38;5;28"     # green  #008700
+BAD = "38;5;167"     # red    #d75f5f
 DOT = "·" if FANCY else "-"
 ARROW = "→" if FANCY else "->"
 
@@ -80,23 +89,23 @@ def paint(text, *codes):
 
 
 def card_path(p):
-    return paint(p, BOLD, MAGENTA)
+    return paint(p, BOLD)
 
 
 def dest_path(p):
-    return paint(p, BOLD, CYAN)
+    return paint(p, BOLD)
 
 
 def ok(text):
-    return paint(("✓ " if FANCY else "") + text, BOLD, GREEN)
+    return paint(("✓ " if FANCY else "") + text, BOLD, GOOD)
 
 
 def warn(text):
-    return paint(("⚠ " if FANCY else "! ") + text, BOLD, YELLOW)
+    return paint(("⚠ " if FANCY else "! ") + text, BOLD, ATTN)
 
 
 def bad(text):
-    return paint(("✗ " if FANCY else "x ") + text, BOLD, RED)
+    return paint(("✗ " if FANCY else "x ") + text, BOLD, BAD)
 
 
 def dim(text):
@@ -106,7 +115,7 @@ def dim(text):
 def step(n, total, title):
     rule = "─" if FANCY else "-"
     head = f"{rule * 2} Step {n} of {total} {DOT} {title} "
-    print("\n" + paint(head + rule * max(0, 60 - len(head)), BOLD, CYAN))
+    print("\n" + paint(head + rule * max(0, 60 - len(head)), BOLD, ACCENT))
 
 
 def nice_dt(dt):
@@ -464,7 +473,7 @@ def build_plan(dest, cards):
     index = DestIndex(dest)
     new, fills, seen_keys, per_card = [], [], set(), {}
     listed = [(card, scan_card(card)) for card in cards]
-    bar = Bar(sum(len(items) for _, items in listed), "Checking", CYAN)
+    bar = Bar(sum(len(items) for _, items in listed), "Checking", ACCENT)
     for card, items in listed:
         stats = {"card": card, "photos_on_card": 0, "videos_on_card": 0,
                  "already_photos": 0, "already_videos": 0, "new_photos": 0, "new_videos": 0,
@@ -625,7 +634,7 @@ def copy_file(src, dst, progress):
 def run_import(plan):
     items = plan["items"]
     total_files = sum(len(it["files"]) for it in items)
-    progress = Bar(sum(it["size"] for it in items), "Copying", GREEN, nbytes=True,
+    progress = Bar(sum(it["size"] for it in items), "Copying", ACCENT, nbytes=True,
                    files_total=total_files, log=True)
     copied, errors, pairs, done = [], [], [], []
     for it in items:
@@ -706,10 +715,10 @@ def item_folder(dest, it):
 
 def _mark(kind):
     if kind == "ok":
-        return paint("✓" if FANCY else "OK", BOLD, GREEN)
+        return paint("✓" if FANCY else "OK", BOLD, GOOD)
     if kind == "warn":
-        return paint("⚠" if FANCY else "!", BOLD, YELLOW)
-    return paint("✗" if FANCY else "x", BOLD, RED)
+        return paint("⚠" if FANCY else "!", BOLD, ATTN)
+    return paint("✗" if FANCY else "x", BOLD, BAD)
 
 
 def _row(name, value, width=19):
@@ -718,7 +727,7 @@ def _row(name, value, width=19):
 
 def _day(rel):
     head, day = os.path.split(rel)
-    return dim(head + os.sep) + paint(day, BOLD, CYAN), len(rel)
+    return dim(head + os.sep) + paint(day, BOLD), len(rel)
 
 
 def print_days(rows):
@@ -734,19 +743,19 @@ def print_detect(info):
         for c in info["cards"]:
             print(f"  {_mark('ok')} Memory card    " + card_path(c))
     else:
-        print(f"  {_mark('bad')} Memory card    " + paint("not found", YELLOW))
+        print(f"  {_mark('bad')} Memory card    " + paint("not found", ATTN))
     if not info["dest"]:
-        print(f"  {_mark('bad')} Backup folder  " + paint("not set (use --dest or SONY_IMPORT_DEST)", YELLOW))
+        print(f"  {_mark('bad')} Backup folder  " + paint("not set (use --dest or SONY_IMPORT_DEST)", ATTN))
         return
     if info["dest_drive"]:
         if info["dest_drive_connected"]:
             print(f"  {_mark('ok')} Backup drive   " + dest_path(info["dest_drive"]))
         else:
             print(f"  {_mark('bad')} Backup drive   " + dest_path(info["dest_drive"])
-                  + paint("  not connected", YELLOW))
+                  + paint("  not connected", ATTN))
     if info["dest_drive_connected"]:
         state = _mark("ok") if info["dest_exists"] else _mark("warn")
-        note = "" if info["dest_exists"] else paint("  will be created", YELLOW)
+        note = "" if info["dest_exists"] else paint("  will be created", ATTN)
         print(f"  {state} Backup folder  " + dest_path(info["dest"]) + note)
 
 
@@ -757,9 +766,9 @@ def print_plan(plan):
         print("\n  " + paint("Memory card", BOLD) + "    " + card_path(s["card"]))
         _row("On card", counts(s["photos_on_card"], s["videos_on_card"]) or "nothing")
         already = counts(s["already_photos"], s["already_videos"])
-        _row("Already backed up", paint(already, GREEN) if already else dim("nothing"))
+        _row("Already backed up", paint(already, BOLD, GOOD) if already else dim("nothing"))
         if s["new_photos"] or s["new_videos"] or s["new_xml"]:
-            _row("New", paint(counts(s["new_photos"], s["new_videos"], s["new_xml"]), BOLD, YELLOW)
+            _row("New", paint(counts(s["new_photos"], s["new_videos"], s["new_xml"]), BOLD, ATTN)
                  + dim(f"  {DOT} {human(s['new_bytes'])}"))
             if s["repairs"]:
                 n = s["repairs"]
@@ -788,7 +797,7 @@ def print_report(rep):
     if rep["errors"]:
         print("\n  " + bad(f"{len(rep['errors'])} could not be copied:"))
         for e in rep["errors"]:
-            print("    " + paint(os.path.basename(e["files"][0]), RED) + dim(f"  {e['error']}"))
+            print("    " + paint(os.path.basename(e["files"][0]), BAD) + dim(f"  {e['error']}"))
     if rep["raw_jpg_pairs"]:
         n = len(rep["raw_jpg_pairs"])
         print("\n  " + warn(f"{n} photo{'s were' if n != 1 else ' was'} shot as RAW + JPG"))
@@ -811,8 +820,8 @@ def ask(q):
 
 def prompt(question, keys=()):
     """Ask a question; keys is a list of (key, meaning) shown as coloured hints."""
-    hint = "  ".join(f"{paint('[' + k + ']', BOLD, CYAN)} {meaning}" for k, meaning in keys)
-    arrow = paint("›" if FANCY else ">", BOLD, CYAN)
+    hint = "  ".join(f"{paint('[' + k + ']', BOLD, ACCENT)} {meaning}" for k, meaning in keys)
+    arrow = paint("›" if FANCY else ">", BOLD, ACCENT)
     return ask(f"\n  {paint(question, BOLD)}  {hint}  {arrow} ")
 
 
@@ -853,14 +862,14 @@ def banner():
     ver = f"v{__version__}"
     width = max(len(title) + len(ver) + 4, len(sub)) + 4
     if FANCY:
-        edge = paint("│", CYAN)
-        print("\n  " + paint("┌" + "─" * width + "┐", CYAN))
+        edge = paint("│", ACCENT)
+        print("\n  " + paint("┌" + "─" * width + "┐", ACCENT))
         gap = width - 2 - len(title) - len(ver)
-        print(f"  {edge}  {paint(title, BOLD, CYAN)}{' ' * (gap - 2)}{dim(ver)}  {edge}")
+        print(f"  {edge}  {paint(title, BOLD, ACCENT)}{' ' * (gap - 2)}{dim(ver)}  {edge}")
         print(f"  {edge}  {dim(sub)}{' ' * (width - 2 - len(sub))}{edge}")
-        print("  " + paint("└" + "─" * width + "┘", CYAN))
+        print("  " + paint("└" + "─" * width + "┘", ACCENT))
     else:
-        print(f"\n  {paint(title, BOLD, CYAN)}  {dim(ver)}\n  {dim(sub)}")
+        print(f"\n  {paint(title, BOLD, ACCENT)}  {dim(ver)}\n  {dim(sub)}")
 
 
 def choose_dest(last, keep_text="Or just press Enter to use the same folder as last time: "):
@@ -878,7 +887,7 @@ def choose_dest(last, keep_text="Or just press Enter to use the same folder as l
     if last:
         print("  " + dim(keep_text) + dest_path(last))
     while True:
-        a = ask("  " + paint("›" if FANCY else ">", BOLD, CYAN) + " ")
+        a = ask("  " + paint("›" if FANCY else ">", BOLD, ACCENT) + " ")
         if a.lower() == "q":
             return None
         if not a:
