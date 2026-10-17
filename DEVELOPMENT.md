@@ -101,11 +101,36 @@ python3 tests/smoke_test.py python3 sony-import.py   # test the script
 python3 tests/smoke_test.py ./dist/sony-import       # test a built app
 ```
 
+## The one-line installer
+
+[`install.sh`](install.sh) is what the README's Terminal line runs (macOS and Linux). It downloads
+the latest release with `curl` and installs it:
+- **macOS:** a small `Sony Import.app` in `/Applications`, or `~/Applications` if that isn't
+  writable. Its launcher opens the tool in a Terminal window, and it uses the icon in
+  [`docs/AppIcon.icns`](docs/AppIcon.icns).
+- **Linux:** `~/.local/bin/sony-import` plus an app-menu entry.
+
+Files downloaded by `curl` don't get macOS's quarantine mark, so the app opens without the
+Gatekeeper block that browser downloads hit. The real fix would be signing and notarizing with a
+paid Apple Developer ID. This avoids the block without that.
+
+Environment overrides (used by CI to test it):
+
+| Variable | Default |
+|---|---|
+| `SONY_IMPORT_RELEASES` | `https://github.com/imsoumya18/sony-import/releases/latest/download` |
+| `SONY_IMPORT_RAW` | `https://raw.githubusercontent.com/imsoumya18/sony-import/main` (icons) |
+| `SONY_IMPORT_APPS_DIR` | `/Applications` (macOS) |
+| `SONY_IMPORT_BIN_DIR` | `~/.local/bin` (Linux) |
+| `SONY_IMPORT_NO_REVEAL` | unset: when unset, it shows the app in Finder afterwards |
+
+The icon source is [`docs/icon.png`](docs/icon.png) (1024 px). It's drawn in the app's teal and orange.
+
 ## Building and releasing
 
 [GitHub Actions](.github/workflows/build.yml) builds standalone apps with PyInstaller on Windows,
-macOS (Apple Silicon and Intel) and Linux, and runs the smoke test against each one. This happens
-on every push. Pushing a version tag also publishes the apps as a GitHub Release:
+macOS (Apple Silicon and Intel) and Linux, and runs the smoke test against each one. It also runs
+the one-line installer on Linux and both Macs. This happens on every push. Pushing a version tag also publishes the apps as a GitHub Release:
 
 ```bash
 git tag v1.2.0 && git push origin v1.2.0

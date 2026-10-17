@@ -1,10 +1,10 @@
 # Sony Import
 
-[![Download](https://img.shields.io/github/v/release/imsoumya18/sony-import?label=download&color=008787)](https://github.com/imsoumya18/sony-import/releases/latest)
+[![Latest version](https://img.shields.io/github/v/release/imsoumya18/sony-import?label=version&color=008787)](https://github.com/imsoumya18/sony-import/releases/latest)
 [![Build](https://img.shields.io/github/actions/workflow/status/imsoumya18/sony-import/build.yml?branch=main&label=build)](https://github.com/imsoumya18/sony-import/actions/workflows/build.yml)
 [![Downloads](https://img.shields.io/github/downloads/imsoumya18/sony-import/total)](https://github.com/imsoumya18/sony-import/releases)
-[![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-008787)](#download)
-[![No install needed](https://img.shields.io/badge/install-not%20needed-008787)](#download)
+[![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-008787)](#install)
+[![Setup](https://img.shields.io/badge/setup-one%20line-008787)](#install)
 [![License: MIT](https://img.shields.io/github/license/imsoumya18/sony-import?color=008787)](LICENSE)
 
 Back up the photos and videos from your Sony camera's memory card, neatly sorted into
@@ -12,36 +12,52 @@ Back up the photos and videos from your Sony camera's memory card, neatly sorted
 
 <p align="center"><img src="docs/screenshot.png" alt="Sony Import checking a memory card before copying" width="720"></p>
 
-## Download
+## Install
+
+### Mac: one line, no security warnings
+
+1. Open **Terminal**: press <kbd>⌘</kbd> <kbd>Space</kbd>, type `Terminal`, press <kbd>Enter</kbd>.
+2. Paste this line and press <kbd>Enter</kbd>:
+
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/imsoumya18/sony-import/main/install.sh | bash
+   ```
+
+3. **Sony Import** now appears in your Applications folder and Launchpad. Double-click it whenever
+   you want to back up a card.
+
+It picks the right version for your Mac (Apple or Intel chip) by itself. To update, run the same
+line again. The same command also works on **Linux**.
+
+### Windows
+
+Download **[sony-import-windows.exe](https://github.com/imsoumya18/sony-import/releases/latest/download/sony-import-windows.exe)**
+and double-click it. The first time, Windows may say "Windows protected your PC". Click
+**More info** → **Run anyway**.
+
+<details>
+<summary>Prefer to download the Mac or Linux app directly?</summary>
 
 | Your computer | Download |
 |---|---|
-| Windows | [sony-import-windows.exe](https://github.com/imsoumya18/sony-import/releases/latest/download/sony-import-windows.exe) |
 | Mac with Apple chip (M1, M2, M3…) | [sony-import-macos-apple-silicon.zip](https://github.com/imsoumya18/sony-import/releases/latest/download/sony-import-macos-apple-silicon.zip) |
 | Mac with Intel chip | [sony-import-macos-intel.zip](https://github.com/imsoumya18/sony-import/releases/latest/download/sony-import-macos-intel.zip) |
 | Linux (64-bit) | [sony-import-linux.zip](https://github.com/imsoumya18/sony-import/releases/latest/download/sony-import-linux.zip) |
 
-Not sure which Mac you have? Apple menu  → **About This Mac** → look at "Chip".
-
-<details>
-<summary><b>Your computer warns you the first time you open it?</b> (click to see what to do)</summary>
-
-The app is free and not signed with a paid Apple or Microsoft certificate, so the first time:
-
-- **Windows:** on "Windows protected your PC", click **More info** → **Run anyway**.
-- **Mac:** unzip it and double-click `sony-import`. When macOS says it can't verify the app:
+- **Mac:** unzip it and double-click `sony-import`. Because it was downloaded in a browser,
+  macOS blocks it the first time:
   1. Click **Done**.
   2. Go to **System Settings → Privacy & Security**.
   3. Scroll down and click **Open Anyway**.
-- **Linux:** unzip it, open a terminal in that folder and run `./sony-import`.
 
-You only need to do this once.
+  The Terminal line above avoids this, which is why it's the recommended way.
+- **Linux:** unzip it, open a terminal in that folder and run `./sony-import`.
 </details>
 
 ## How to use it
 
 1. Put the memory card in your computer, and plug in the drive you back up to.
-2. Double-click **sony-import**.
+2. Open **Sony Import** (or `sony-import-windows.exe` on Windows).
 3. **Choose your backup folder:** drag the folder into the window and press Enter. It can be any
    folder on any drive. Next time, just press Enter to reuse it.
 4. Check what it found, type `y` to start copying, and wait for **All done**.

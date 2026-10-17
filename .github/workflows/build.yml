@@ -63,6 +63,35 @@ jobs:
           name: ${{ matrix.asset }}
           path: out/${{ matrix.asset }}
 
+  installer:
+    # Runs install.sh the way users do (piped into bash) against the latest published release.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-latest, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install with the one-line installer
+        env:
+          SONY_IMPORT_RAW: file://${{ github.workspace }}
+          SONY_IMPORT_APPS_DIR: ${{ runner.temp }}/apps
+          SONY_IMPORT_BIN_DIR: ${{ runner.temp }}/bin
+          SONY_IMPORT_NO_REVEAL: "1"
+        run: cat install.sh | bash
+      - name: Check the installed app runs
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            APP="$RUNNER_TEMP/apps/Sony Import.app"
+            test -x "$APP/Contents/MacOS/launcher"
+            test -f "$APP/Contents/Resources/AppIcon.icns"
+            plutil -lint "$APP/Contents/Info.plist"
+            "$APP/Contents/Resources/sony-import" --version
+          else
+            test -f "$HOME/.local/share/applications/sony-import.desktop"
+            "$RUNNER_TEMP/bin/sony-import" --version
+          fi
+
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
