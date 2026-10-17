@@ -1,9 +1,9 @@
-# sony_import
+# Sony Import
 
-Back up photos and videos from Sony camera memory cards to an external drive, sorted into
-**Year → Month → Day** folders. Anything already in the backup is skipped automatically.
+Back up the photos and videos from your Sony camera's memory card to a computer or external drive,
+neatly sorted into **Year → Month → Day** folders. Run it again any time: it only copies what's new.
 
-It is one Python file with no dependencies, made for macOS.
+**Works on Windows, macOS and Linux. Nothing to install: download one file and double-click it.**
 
 ```
 Sony Backup/
@@ -21,106 +21,125 @@ Sony Backup/
 └── 2027/
 ```
 
-## Features
+## Download
 
-- **Never touches the card.** Files are only read from it. Nothing is renamed, moved or deleted.
-- **Finds Sony cards by folder layout**, whatever the card's name. You can import from several cards at once.
-- **Sorts by the date the photo or video was taken.**
-  - Photos use the EXIF `DateTimeOriginal`.
-  - Videos use the `CreationDate` from Sony's XML sidecar file.
-- **Only creates folders that have something in them.** A day, month or year with no shots gets no folder.
-  - Photos go straight into the day folder.
-  - Videos (MP4 + XML) go into a `Videos` subfolder.
-- **Skips files already in the backup without keeping a database.** Every run scans the backup
-  folder and matches files by size, capture time and a hash of three small content samples.
-  - Files you renamed in the backup are still recognised.
-  - Pointing it at a different backup folder just works.
-- **Renumbers everything in shooting order.** Sony's own counters reset, and different cards
-  reuse the same names. Each imported file gets a new running number, continuing from the highest
-  number already in the backup:
-  - Photos: `DSC00001`
-  - Videos: `C00001`
-  - A RAW+JPG pair shares one number.
-- **Lists RAW+JPG pairs after an import**, and can move the duplicate JPGs to the Trash.
-  Trashed JPGs are not re-imported next time.
-- **Shows a progress bar** while copying. Each file is copied as `.partial`, its size is checked, and only then is it renamed into place.
-  An interrupted import leaves no half-written files under real names.
+Pick the file for your computer:
 
-## Requirements
+| Your computer | Download |
+|---|---|
+| Windows | [sony-import-windows.exe](https://github.com/imsoumya18/sony-import/releases/latest/download/sony-import-windows.exe) |
+| Mac with Apple chip (M1, M2, M3…) | [sony-import-macos-apple-silicon.zip](https://github.com/imsoumya18/sony-import/releases/latest/download/sony-import-macos-apple-silicon.zip) |
+| Mac with Intel chip | [sony-import-macos-intel.zip](https://github.com/imsoumya18/sony-import/releases/latest/download/sony-import-macos-intel.zip) |
+| Linux (64-bit PC) | [sony-import-linux.zip](https://github.com/imsoumya18/sony-import/releases/latest/download/sony-import-linux.zip) |
 
-- macOS (uses `/Volumes`, `sips` and Finder's Trash)
-- Python 3.8+ (the one that comes with Xcode Command Line Tools is fine)
-- A Sony camera. Tested with the a6600 (ILCE-6600). Other Alpha and ZV models use the same card
-  layout, so they should work too.
+Not sure which Mac you have? Click the Apple menu  → **About This Mac** and look at "Chip" or "Processor".
 
-## Install
+### First time opening it
+
+The app isn't signed with a paid Apple or Microsoft certificate, so your computer will warn you the first time. You only need to do this once.
+
+- **Windows:** double-click `sony-import-windows.exe`. If you see "Windows protected your PC",
+  click **More info** → **Run anyway**.
+- **Mac:** double-click the zip to unzip it, then double-click `sony-import`.
+  - If macOS says it can't verify the app, click **Done**.
+  - Then open **System Settings → Privacy & Security**, scroll down, click **Open Anyway** next to
+    "sony-import", and confirm.
+- **Linux:** unzip it, open a terminal in that folder and run `./sony-import`.
+
+## How to use it
+
+1. Put the camera's memory card in your computer, and plug in the drive you back up to (if you use one).
+2. Double-click **sony-import**. A window opens and asks you a few simple questions:
+   1. **Where should the backup go?** Type the folder, or simply **drag the folder into the window**
+      and press Enter. It remembers your answer for next time.
+   2. **Copy from / copy to:** checks that both the card and the backup drive are plugged in. If
+      one is missing it tells you, and waits while you plug it in.
+   3. **What's new:** how many photos and videos aren't backed up yet, how big they are, and which
+      dates they're from.
+   4. **Start copying?** Type `y` and watch the progress bar go to 100%.
+   5. **Shot in RAW + JPG?** It lists those photos and offers to move the extra JPG copies to the
+      Trash / Recycle Bin. You can always get them back from there.
+3. When it says **All done**, you can safely eject the card.
+
+## What it does (and doesn't)
+
+- **Your memory card is never changed.** Files are only read from it, never deleted, moved or renamed.
+- **Sorted by the date you took the photo**, not the date you copied it. A day, month or year with
+  no photos gets no folder. Videos go into a `Videos` folder inside their day.
+- **No duplicates.** Each time, it checks what's already in your backup folder and skips it, even if
+  you renamed files there or are using several memory cards.
+- **One clean numbering.** Sony restarts its file numbers on every card, so the same name can turn
+  up twice. Imported files are renamed in shooting order: `DSC00001`, `DSC00002`… for photos and
+  `C00001`… for videos. Numbering continues from the highest number already in the backup.
+- **Safe if interrupted.** Unplugging the drive or closing the window never leaves half-copied
+  files behind. Just run it again to finish.
+
+### Which cameras?
+
+It's made for Sony cameras that store photos in `DCIM` and videos in `PRIVATE/M4ROOT` on the card.
+That covers Alpha models (a6000 series, a7 series and others) and ZV models. It's tested with the a6600.
+
+It copies RAW (`.ARW`), JPG and HEIF (`.HIF`) photos, and MP4 videos with their `.XML` files.
+
+### Good to know
+
+- **Dates come from the camera's clock.** If the clock is wrong, the folders will be too.
+- **Numbering can be out of date order.** Files already in your backup are never renamed. If you
+  import an older card after a newer one, the older photos get higher numbers. They still go into
+  the right date folders.
+- **Checking a full card takes about a minute** before copying starts.
+
+## For developers
+
+The whole tool is one Python file, [`sony-import.py`](sony-import.py), using only the standard
+library (Python 3.8+). You can run it directly instead of downloading the app:
 
 ```bash
-git clone https://github.com/imsoumya18/sony_import.git
-cd sony_import
+python3 sony-import.py --dest "/Volumes/MySSD/Photos/Sony Backup"   # interactive
 ```
 
-Optionally, set your backup folder once (for example in `~/.zshrc`) so you don't have to pass `--dest` every time:
+There are also non-interactive subcommands for scripting:
 
 ```bash
-export SONY_IMPORT_DEST="/Volumes/MySSD/Photos/Sony Backup"
+python3 sony-import.py detect --dest "$DEST"                 # find cards, check the backup drive
+python3 sony-import.py plan   --dest "$DEST"                 # dry run: what would be copied
+python3 sony-import.py import --dest "$DEST" --report r.json # copy, write a JSON report
+python3 sony-import.py trash-jpgs --report r.json            # move JPGs that have an ARW twin to the Trash
 ```
 
-## Usage
+- **Backup folder:** `--dest` can be replaced by setting the `SONY_IMPORT_DEST` environment variable.
+- **Choosing cards:** `--card PATH` (repeatable) picks specific cards. Otherwise every connected Sony card is used.
+- **JSON output:** `--json` gives machine-readable output for `detect` and `plan`.
 
-### Interactive (recommended)
+### How it works
 
-Plug in the card and the backup drive, then run:
+- **Card detection.** A drive counts as a Sony card when it has a `DCIM` folder named like
+  `100MSDCF` or `10161017` and a `PRIVATE/M4ROOT` folder. Drives are looked for in these places:
+  - macOS: `/Volumes`
+  - Linux: `/media`, `/run/media`, `/mnt`
+  - Windows: drive letters
+- **Dates.**
+  - Photos: EXIF `DateTimeOriginal`, read by a small built-in parser, so no exiftool is needed.
+  - Videos: the `CreationDate` in Sony's XML file.
+- **Duplicate check.** There is no database. The backup folder is scanned each run, and files are
+  matched by size, capture time and a hash of three 64 KB samples. Size and time alone aren't
+  unique, because Sony's compressed RAW files are all the same size and burst shots share a second.
+- **Copying.** Each file is written as `*.partial`, its size is checked, and then it's renamed into
+  place. The original file timestamp is kept.
+- **Trash.** Uses Finder on macOS, the Recycle Bin via PowerShell on Windows (refused on removable
+  drives, which have no Recycle Bin), and `gio trash` / `trash-cli` on Linux.
+- **Saved settings.** The last backup folder is stored in `~/.sony-import.json`.
+
+### Building and releasing
+
+[GitHub Actions](.github/workflows/build.yml) builds the standalone apps with PyInstaller on
+Windows, macOS (Apple Silicon and Intel) and Linux. It also runs
+[`tests/smoke_test.py`](tests/smoke_test.py) against each one. That test creates a fake Sony card,
+imports it, and checks the resulting folders. To publish a new version:
 
 ```bash
-python3 sony_import.py --dest "/Volumes/MySSD/Photos/Sony Backup"
+git tag v1.0.0 && git push origin v1.0.0
 ```
-
-It walks you through each step and waits for a yes before continuing:
-
-1. **Checks the drives.** If the card or the backup drive is missing, it says so and stops.
-2. **Shows the source and destination.** You can confirm, cancel, or type a different backup folder.
-3. **Reports what's new on each card.** Counts, size, and the date range of the new shots.
-4. **Copies** with a progress bar.
-5. **Shows a final report** per day folder and lists any RAW+JPG pairs. It offers to move those JPGs to the Trash.
-
-### Step by step (scripting)
-
-```bash
-python3 sony_import.py detect --dest "$DEST"                 # find cards, check backup drive
-python3 sony_import.py plan   --dest "$DEST"                 # dry run: what would be copied
-python3 sony_import.py import --dest "$DEST" --report r.json # copy, write a JSON report
-python3 sony_import.py trash-jpgs --report r.json            # trash JPGs that have an ARW twin
-```
-
-- **Choosing cards:** `plan` and `import` use every connected Sony card. Use `--card /Volumes/NAME`
-  (repeatable) to pick specific ones.
-- **JSON output:** add `--json` to `detect` or `plan` for machine-readable output.
-- **Progress output:** when the output isn't a terminal, progress is printed as `PROGRESS NN%` lines.
-
-## How a card is recognised
-
-A mounted volume counts as a Sony card when it has both:
-
-- `DCIM/` with at least one Sony-style folder: `100MSDCF` (standard) or `10161017` (date
-  format: folder number, last digit of the year, month, day)
-- `PRIVATE/M4ROOT/` (where Sony stores video clips)
-
-What gets copied:
-
-- **Photos:** `.ARW`, `.JPG`, `.HIF` from every `DCIM` subfolder
-- **Videos:** `PRIVATE/M4ROOT/CLIP/*.MP4` with their `M01.XML` sidecar files
-
-Proxy clips, thumbnails and AVCHD files are ignored.
-
-## Things to know
-
-- **Dates are camera local time.** If the camera clock is wrong, the folders will be too.
-- **Numbering can be out of date order.** Existing backup files are never renamed. If you import
-  a card with older shots after a newer one, the older shots get higher numbers. They still land
-  in the right date folders.
-- **A full card takes a while to scan.** Every file is read to get its date, which takes about
-  40 seconds for ~350 files over USB. Copying speed depends on your card reader and drive.
 
 ## License
 

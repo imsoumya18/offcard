@@ -15,19 +15,26 @@ Subcommands (all print human text; add --json for machine output):
 Run with no subcommand for a fully interactive session in a terminal.
 """
 import argparse
-import calendar
+import getpass
 import hashlib
 import json
 import os
 import re
 import shutil
+import string
 import struct
 import subprocess
 import sys
 import time
 from datetime import datetime
 
+IS_WIN = os.name == "nt"
+IS_MAC = sys.platform == "darwin"
+TRASH = "Recycle Bin" if IS_WIN else "Trash"
+CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".sony-import.json")
 DEFAULT_DEST = os.environ.get("SONY_IMPORT_DEST")  # backup folder; --dest overrides
+MONTHS = ["", "January", "February", "March", "April", "May", "June", "July",
+          "August", "September", "October", "November", "December"]
 PHOTO_EXT = {".ARW", ".JPG", ".JPEG", ".HIF", ".HEIF"}
 SONY_DCIM_DIR = re.compile(r"^\d{3}(MSDCF|\d{5})$")
 NUM_WIDTH = 5
@@ -100,6 +107,8 @@ def _jpeg_datetime(f):
 
 
 def _sips_datetime(path):
+    if not IS_MAC:
+        return None
     try:
         out = subprocess.run(["sips", "-g", "creation", path],
                              capture_output=True, text=True, timeout=30).stdout
@@ -169,18 +178,52 @@ def is_sony_card(root):
         return False
 
 
+def mounted_volumes():
+    """Roots of mounted drives: E:\\ on Windows, /Volumes/X on macOS, /media/user/X on Linux."""
+    if IS_WIN:
+        return [f"{c}:\\" for c in string.ascii_uppercase[2:] if os.path.exists(f"{c}:\\")]
+    if IS_MAC:
+        bases = ["/Volumes"]
+    else:
+        user = getpass.getuser()
+        bases = [f"/media/{user}", f"/run/media/{user}", "/media", "/mnt"]
+    vols = []
+    for base in bases:
+        try:
+            names = sorted(os.listdir(base))
+        except OSError:
+            continue
+        for n in names:
+            root = os.path.join(base, n)
+            if os.path.isdir(root) and root not in vols:
+                vols.append(root)
+    return vols
+
+
 def drive_of(path):
-    """'/Volumes/T7/Photos' -> '/Volumes/T7'; None for folders on the internal disk."""
-    parts = os.path.abspath(path).split(os.sep)
-    return os.sep.join(parts[:3]) if len(parts) > 2 and parts[1] == "Volumes" else None
+    """Root of the external drive holding path, or None if it is on the internal disk."""
+    path = os.path.abspath(path)
+    if IS_WIN:
+        d = os.path.splitdrive(path)[0]
+        return d + "\\" if d and d.upper() != "C:" else None
+    parts = path.split(os.sep)
+    if IS_MAC:
+        return os.sep.join(parts[:3]) if len(parts) > 2 and parts[1] == "Volumes" else None
+    try:
+        user = getpass.getuser()
+    except Exception:
+        user = ""
+    if parts[1:4] == ["run", "media", user] and len(parts) > 4:
+        return os.sep.join(parts[:5])
+    if parts[1:3] == ["media", user] and len(parts) > 3:
+        return os.sep.join(parts[:4])
+    if len(parts) > 2 and parts[1] in ("media", "mnt"):
+        return os.sep.join(parts[:3])
+    return None
 
 
 def detect(dest=None):
-    cards = []
-    for name in sorted(os.listdir("/Volumes")):
-        root = os.path.join("/Volumes", name)
-        if os.path.isdir(root) and is_sony_card(root):
-            cards.append(root)
+    cards = [v for v in mounted_volumes() if is_sony_card(v)]
     drive = drive_of(dest) if dest else None
     return {
         "cards": cards,
@@ -299,8 +342,8 @@ class DestIndex:
 
 def day_folder(dest, dt):
     d = datetime.strptime(dt[:19], "%Y:%m:%d %H:%M:%S")
-    return os.path.join(dest, f"{d.year}", f"{d.month}. {calendar.month_name[d.month]}",
-                        f"{d.day:02d}{calendar.month_abbr[d.month]}{d.year % 100:02d}")
+    return os.path.join(dest, f"{d.year}", f"{d.month}. {MONTHS[d.month]}",
+                        f"{d.day:02d}{MONTHS[d.month][:3]}{d.year % 100:02d}")
 
 
 def build_plan(dest, cards):
@@ -388,13 +431,18 @@ class Progress:
 def copy_file(src, dst, progress):
     os.makedirs(os.path.dirname(dst), exist_ok=True)
     tmp = dst + ".partial"
-    with open(src, "rb") as fi, open(tmp, "wb") as fo:
-        while True:
-            buf = fi.read(CHUNK)
-            if not buf:
-                break
-            fo.write(buf)
-            progress.update(len(buf))
+    try:
+        with open(src, "rb") as fi, open(tmp, "wb") as fo:
+            while True:
+                buf = fi.read(CHUNK)
+                if not buf:
+                    break
+                fo.write(buf)
+                progress.update(len(buf))
+    except BaseException:  # includes Ctrl-C: never leave half-written files behind
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        raise
     st = os.stat(src)
     os.utime(tmp, (st.st_atime, st.st_mtime))
     if os.path.getsize(tmp) != st.st_size:
@@ -433,18 +481,39 @@ def run_import(plan):
             "raw_jpg_pairs": pairs, "by_day": by_day}
 
 
+def _windows_drive_is_removable(path):
+    import ctypes
+    root = os.path.splitdrive(os.path.abspath(path))[0] + "\\"
+    return ctypes.windll.kernel32.GetDriveTypeW(root) == 2  # DRIVE_REMOVABLE
+
+
 def trash(paths):
-    """Move files to the macOS Trash via Finder (recoverable)."""
+    """Move files to the Trash / Recycle Bin so they can be recovered. Never deletes outright."""
     moved = []
     for i in range(0, len(paths), 100):
         batch = [p for p in paths[i:i + 100] if os.path.exists(p)]
         if not batch:
             continue
-        files = ", ".join('POSIX file "%s"' % p.replace('"', '\\"') for p in batch)
-        r = subprocess.run(["osascript", "-e", f'tell application "Finder" to delete {{{files}}}'],
-                           capture_output=True, text=True)
+        if IS_MAC:
+            files = ", ".join('POSIX file "%s"' % p.replace('"', '\\"') for p in batch)
+            cmd = ["osascript", "-e", f'tell application "Finder" to delete {{{files}}}']
+        elif IS_WIN:
+            # Removable drives have no Recycle Bin: Windows would delete permanently.
+            if _windows_drive_is_removable(batch[0]):
+                raise RuntimeError("this drive has no Recycle Bin, so the JPGs were left in place")
+            script = "Add-Type -AssemblyName Microsoft.VisualBasic; " + "; ".join(
+                "[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile('%s', 'OnlyErrorDialogs', "
+                "'SendToRecycleBin')" % p.replace("'", "''") for p in batch)
+            cmd = ["powershell", "-NoProfile", "-Command", script]
+        elif shutil.which("gio"):
+            cmd = ["gio", "trash"] + batch
+        elif shutil.which("trash-put"):
+            cmd = ["trash-put"] + batch
+        else:
+            raise RuntimeError("no Trash tool found (install 'gio' or 'trash-cli'); JPGs were left in place")
+        r = subprocess.run(cmd, capture_output=True, text=True)
         if r.returncode != 0:
-            raise RuntimeError(r.stderr.strip())
+            raise RuntimeError(r.stderr.strip() or "moving to the Trash failed")
         moved += batch
     return moved
 
@@ -503,7 +572,8 @@ def print_report(rep):
         for e in rep["errors"]:
             print(f"  {e['files']}: {e['error']}")
     if rep["raw_jpg_pairs"]:
-        print(f"\n{len(rep['raw_jpg_pairs'])} photos were shot as RAW+JPG:")
+        n = len(rep["raw_jpg_pairs"])
+        print(f"\n{n} photo{'s were' if n != 1 else ' was'} shot as RAW+JPG:")
         for p in rep["raw_jpg_pairs"]:
             print(f"  {os.path.relpath(p['arw'], rep['dest'])}  +  {os.path.basename(p['jpg'])}")
 
@@ -517,38 +587,130 @@ def ask(q):
         return ""
 
 
+def yes(q):
+    return ask(q + " [y/n]: ").lower() in ("y", "yes")
+
+
+def clean_path(text):
+    """Accept a typed path or a folder dragged into the window (quoted or backslash-escaped)."""
+    t = text.strip()
+    if t.startswith("& "):  # PowerShell drag-and-drop
+        t = t[2:].strip()
+    if len(t) >= 2 and t[0] == t[-1] and t[0] in "'\"":
+        t = t[1:-1]
+    elif not IS_WIN:
+        t = re.sub(r"\\(.)", r"\1", t)  # "My\ SSD" -> "My SSD"
+    return os.path.abspath(os.path.expanduser(t)) if t else ""
+
+
+def load_config():
+    try:
+        with open(CONFIG_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_config(cfg):
+    try:
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(cfg, f, indent=2)
+    except Exception:
+        pass
+
+
+def choose_dest(current):
+    example = "E:\\Photos\\Sony Backup" if IS_WIN else "/Volumes/MySSD/Photos/Sony Backup"
+    print("\nWhere should the backup go? Type the folder path, or drag the folder into this window.")
+    if current:
+        print(f"Press Enter to keep: {current}")
+    else:
+        print(f"Example: {example}")
+    a = ask("Backup folder: ")
+    return clean_path(a) if a else current
+
+
 def interactive(dest):
+    print("=" * 60)
+    print("  Sony Import: back up your camera card by date")
+    print("=" * 60)
+    cfg = load_config()
+    dest = dest or cfg.get("dest")
     if not dest:
-        dest = os.path.expanduser(ask("Backup folder (e.g. /Volumes/MySSD/Photos/Sony Backup): "))
+        dest = choose_dest(None)
         if not dest:
             return 0
-    info = detect(dest)
-    print_detect(info)
-    if not info["cards"] or not info["dest_drive_connected"]:
-        print("\nConnect the missing drive(s) and run again.")
-        return 1
-    print(f"\nSource: {', '.join(info['cards'])}\nDestination: {dest}")
-    a = ask("Use these? [y = yes / n = cancel / or type another destination path]: ")
-    if a.lower() in ("n", "no", ""):
-        return 0
-    if a.lower() not in ("y", "yes"):
-        dest = os.path.expanduser(a)
-        if drive_of(dest) and not os.path.isdir(drive_of(dest)):
-            print(f"{drive_of(dest)} is not connected.")
+
+    while True:  # wait until the card and the backup drive are both plugged in
+        info = detect(dest)
+        missing = []
+        if not info["cards"]:
+            missing.append("a Sony camera memory card")
+        if not info["dest_drive_connected"]:
+            missing.append(f"the backup drive ({info['dest_drive']})")
+        if not missing:
+            break
+        print("\nNot connected: " + " and ".join(missing) + ".")
+        a = ask("Plug it in and press Enter to check again, or type q to quit: ")
+        if a.lower() == "q":
             return 1
+
+    while True:  # confirm source and destination
+        print("\nCopy FROM (memory card):")
+        for c in info["cards"]:
+            print(f"   {c}")
+        print(f"Copy TO (backup folder):\n   {dest}")
+        a = ask("\nIs this right? [y = yes / c = change backup folder / q = quit]: ").lower()
+        if a in ("q", "n", "no"):
+            return 0
+        if a in ("y", "yes"):
+            break
+        if a == "c":
+            dest = choose_dest(dest)
+            drive = drive_of(dest)
+            if drive and not os.path.isdir(drive):
+                print(f"That drive ({drive}) is not connected.")
+
+    if not os.path.isdir(dest):
+        if not yes(f"\nThe folder {dest} does not exist. Create it?"):
+            return 0
+        os.makedirs(dest)
+    save_config({**cfg, "dest": dest})
+
+    print("\nChecking what is already backed up (this can take a minute)...")
     plan = build_plan(dest, info["cards"])
     print()
     print_plan(plan)
     if not plan["items"]:
+        print("\nEverything on the card is already backed up.")
         return 0
-    if ask("\nStart copying? [y/n]: ").lower() not in ("y", "yes"):
+    if not yes("\nStart copying?"):
         return 0
+    print()
     rep = run_import(plan)
     print_report(rep)
-    if rep["raw_jpg_pairs"] and ask("\nMove the JPG copies of these to the Trash? [y/n]: ").lower() in ("y", "yes"):
-        moved = trash([p["jpg"] for p in rep["raw_jpg_pairs"]])
-        print(f"Moved {len(moved)} JPGs to the Trash.")
+    if rep["raw_jpg_pairs"] and yes(f"\nYou have the RAW file for these, so the JPGs are extra copies.\n"
+                                    f"Move these JPGs to the {TRASH}?"):
+        try:
+            moved = trash([p["jpg"] for p in rep["raw_jpg_pairs"]])
+            print(f"Moved {len(moved)} JPGs to the {TRASH}.")
+        except Exception as e:
+            print(f"Could not move the JPGs: {e}")
+    print("\nAll done. It is now safe to remove the card.")
     return 1 if rep["errors"] else 0
+
+
+def run_interactive(dest):
+    """Wrapper for double-click use: show errors and keep the window open at the end."""
+    code = 1
+    try:
+        code = interactive(dest)
+    except KeyboardInterrupt:
+        print("\n\nStopped. Nothing half-copied was left behind; run again to finish.")
+    except Exception as e:
+        print(f"\n\nSomething went wrong: {e}")
+    ask("\nPress Enter to close this window.")
+    return code
 
 
 def main():
@@ -565,12 +727,12 @@ def main():
         p.add_argument("--json", action="store_true")
         if name == "import":
             p.add_argument("--report", help="write the final report JSON here")
-    p = sub.add_parser("trash-jpgs")
+    p = sub.add_parser("trash-jpgs", help="move JPGs that have an ARW twin to the Trash")
     p.add_argument("--report", required=True)
     args = ap.parse_args()
 
     if args.cmd is None:
-        return interactive(args.dest)
+        return run_interactive(args.dest)
     if args.cmd == "detect":
         info = detect(args.dest)
         print(json.dumps(info, indent=2)) if args.json else print_detect(info)

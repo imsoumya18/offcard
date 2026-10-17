@@ -1,0 +1,78 @@
+# Builds a standalone sony-import app (no Python needed) for each OS and tests it.
+# Pushing a tag like v1.0.0 also publishes the apps as a GitHub Release.
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            asset: sony-import-windows.exe
+          - os: macos-latest          # Apple Silicon (M1 and newer)
+            asset: sony-import-macos-apple-silicon.zip
+          - os: macos-15-intel        # Intel Macs
+            asset: sony-import-macos-intel.zip
+          - os: ubuntu-22.04          # older glibc, so it runs on most distros
+            asset: sony-import-linux.zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Test the script
+        run: python tests/smoke_test.py python sony-import.py
+
+      - name: Build standalone app
+        run: |
+          pip install pyinstaller
+          pyinstaller --onefile --name sony-import sony-import.py
+
+      - name: Test the standalone app
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then APP=dist/sony-import.exe; else APP=dist/sony-import; fi
+          python tests/smoke_test.py "$APP"
+
+      - name: Package
+        shell: bash
+        run: |
+          mkdir -p out
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cp dist/sony-import.exe "out/${{ matrix.asset }}"
+          else
+            # zip keeps the "executable" permission that a plain download would lose
+            (cd dist && zip -q "../out/${{ matrix.asset }}" sony-import)
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: out/${{ matrix.asset }}
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
