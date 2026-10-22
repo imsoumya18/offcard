@@ -10,11 +10,11 @@
 Back up the photos and videos from your Sony camera's memory card, neatly sorted into
 **Year → Month → Day** folders. Run it again any time: it only copies what's new.
 
-<p align="center"><img src="docs/screenshot.png" alt="Sony Import checking a memory card before copying" width="720"></p>
+<p align="center"><img src="docs/screenshot.png" alt="Sony Import confirming that every file on a memory card is backed up and it's safe to format" width="720"></p>
 
 ## Install
 
-### Mac: one line, no security warnings
+### Mac and Linux: one line, no security warnings
 
 1. Open **Terminal**: press <kbd>⌘</kbd> <kbd>Space</kbd>, type `Terminal`, press <kbd>Enter</kbd>.
 2. Paste this line and press <kbd>Enter</kbd>:
@@ -26,8 +26,8 @@ Back up the photos and videos from your Sony camera's memory card, neatly sorted
 3. **Sony Import** now appears in your Applications folder and Launchpad. Double-click it whenever
    you want to back up a card.
 
-It picks the right version for your Mac (Apple or Intel chip) by itself. To update, run the same
-line again. The same command also works on **Linux**.
+It picks the right version for your computer (Mac with Apple or Intel chip, or Linux) by itself.
+To update, run the same line again. On Linux, Sony Import appears in your app menu.
 
 ### Windows: one line, no security warnings
 
@@ -67,14 +67,13 @@ To update, run the same line again. No admin rights needed.
 ## How to use it
 
 1. Put the memory card in your computer, and plug in the drive you back up to.
-2. Open **Sony Import** from Applications (Mac) or the Start menu (Windows).
+2. Open **Sony Import**: from Applications on a Mac, the Start menu on Windows, or the app menu on Linux.
 3. **Choose your backup folder:** drag the folder into the window and press Enter. It can be any
    folder on any drive. Next time, just press Enter to reuse it.
-4. Check what it found, type `y` to start copying, and wait for **All done**.
-5. Want to format the card afterwards? Say `y` when it offers to **check every file byte by byte**.
+4. Check what it found and type `y` to start copying.
+5. **Planning to format the card?** Type `y` when it offers to check every file byte by byte.
    It tells you when it's safe to format the card in your camera.
-
-That's it. You can safely eject the card.
+6. When it says **All done**, press Enter to close the window and eject the card.
 
 Your backup folder will look like this:
 
@@ -92,25 +91,44 @@ Camera Backup/                ← the folder you chose
 
 ## What it does
 
-- **Never changes your memory card.** It only reads from it.
-- **Sorts by the date you took each photo.** There are no empty folders, and videos go in a
-  `Videos` folder inside their day.
-- **Never copies the same photo twice**, even if you renamed files in the backup or use several cards.
-- **Fills gaps.** If a video or RAW + JPG photo is only half backed up, it copies just the missing half.
-- **Gives every file one clean number** in shooting order (`DSC00001`…, `C00001`…), so names
-  never clash.
-- **Shot in RAW + JPG?** It offers to move the extra JPGs to the Trash. You can restore them from there.
-- **Tells you when it's safe to format the card:** an optional byte-for-byte check of every file
-  against your backup.
-- **Checks there's enough space** on your backup drive before copying anything.
-- **Tells you when an update is out**, with the one line to install it.
-- **Safe to interrupt.** If you close the window midway, just run it again to finish.
+**Keeps your photos safe**
+- Never changes your memory card. It only reads from it.
+- Checks there's enough space on your backup drive before copying anything.
+- Tells you when it's safe to format the card, after checking every file byte by byte.
+- Safe to interrupt. If you close the window midway, just run it again to finish.
+
+**Keeps them organised**
+- Sorts everything by the date you took it, with videos in a `Videos` folder inside their day.
+- Never copies the same photo twice, even if you renamed files in the backup or use several cards.
+- Fills gaps: if a video or RAW + JPG photo is only half backed up, it copies just the missing half.
+- Gives every file one clean number in shooting order (`DSC00001`…, `C00001`…), so names never clash.
+- Shot in RAW + JPG? It offers to move the extra JPGs to the Trash, where you can restore them.
+
+**Stays easy**
+- One line to install on Windows, Mac or Linux, with no security warnings.
+- Tells you when an update is out, with the line to install it.
 
 ## Good to know
 
 - **Cameras:** works with Sony Alpha (a6000 series, a7 series…) and ZV cameras. Tested on the a6600.
 - **Folder dates use the camera's clock**, so make sure it's set correctly.
-- **Checking a full card takes about a minute** before copying starts.
+- **Checking a full card takes about a minute** before copying starts. The byte-by-byte
+  "safe to format" check takes about a minute for every 2 GB on the card, depending on your card
+  reader.
+- **Privacy:** your photos never leave your computer. The only internet use is a quick check with
+  GitHub for a newer version. Set `SONY_IMPORT_NO_UPDATE_CHECK=1` to turn it off.
+
+<details>
+<summary>Uninstall</summary>
+
+- **Mac:** drag **Sony Import** from Applications to the Trash.
+- **Windows:** delete the folder `%LOCALAPPDATA%\Programs\Sony Import` and the **Sony Import**
+  shortcut in the Start menu (right-click it → Open file location).
+- **Linux:** delete `~/.local/bin/sony-import` and `~/.local/share/applications/sony-import.desktop`.
+
+Your backup folder and photos are never touched. The app also keeps one small settings file, the
+last backup folder you used, in `.sony-import.json` in your home folder. You can delete that too.
+</details>
 
 ---
 
