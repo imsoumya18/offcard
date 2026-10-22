@@ -63,12 +63,12 @@ EXPECTED = {
 }
 
 
-def run(cmd):
+def run(cmd, env=None, expect=0):
     print("$", " ".join(cmd), flush=True)
-    r = subprocess.run(cmd, capture_output=True, text=True)
+    r = subprocess.run(cmd, capture_output=True, text=True, env={**os.environ, **(env or {})})
     print(r.stdout, r.stderr, sep="", flush=True)
-    if r.returncode != 0:
-        sys.exit(f"FAIL: exit code {r.returncode}")
+    if r.returncode != expect:
+        sys.exit(f"FAIL: exit code {r.returncode}, expected {expect}")
     return r.stdout
 
 
@@ -107,6 +107,16 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         card, dest = os.path.join(tmp, "card"), os.path.join(tmp, "backup")
         make_card(card)
+
+        # Backup drive too full -> plan says so, import copies nothing and exits with code 3.
+        full = {"SONY_IMPORT_TEST_FREE_BYTES": "1000"}
+        plan = json.loads(run(tool + ["plan", "--dest", dest, "--card", card, "--json"], env=full))
+        if plan["enough_space"] or plan["needed_bytes"] <= 0:
+            sys.exit(f"FAIL: a full drive was not detected: {plan}")
+        run(tool + ["import", "--dest", dest, "--card", card], env=full, expect=3)
+        if os.path.exists(dest) and tree(dest):
+            sys.exit("FAIL: files were copied although the drive was full")
+
         run(tool + ["plan", "--dest", dest, "--card", card])
         run(tool + ["import", "--dest", dest, "--card", card])
         check_tree(dest, "first import")

@@ -88,6 +88,7 @@ Camera Backup/                ← the folder you chose
 - **Gives every file one clean number** in shooting order (`DSC00001`…, `C00001`…), so names
   never clash.
 - **Shot in RAW + JPG?** It offers to move the extra JPGs to the Trash. You can restore them from there.
+- **Checks there's enough space** on your backup drive before copying anything.
 - **Safe to interrupt.** If you close the window midway, just run it again to finish.
 
 ## Good to know

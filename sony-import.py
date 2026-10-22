@@ -469,6 +469,19 @@ def check_item(it, index):
     return "new", None
 
 
+SPACE_MARGIN = 50 * 1024 * 1024  # keep a little room for folder entries and the file system
+
+
+def free_bytes(path):
+    """Free space on the drive that holds path. The folder itself may not exist yet."""
+    if os.environ.get("SONY_IMPORT_TEST_FREE_BYTES"):  # test hook: pretend the drive is this full
+        return int(os.environ["SONY_IMPORT_TEST_FREE_BYTES"])
+    p = os.path.abspath(path)
+    while not os.path.exists(p) and os.path.dirname(p) != p:
+        p = os.path.dirname(p)
+    return shutil.disk_usage(p).free
+
+
 def build_plan(dest, cards):
     index = DestIndex(dest)
     new, fills, seen_keys, per_card = [], [], set(), {}
@@ -531,8 +544,11 @@ def build_plan(dest, cards):
             if it["kind"] == "pair":
                 it["pair"] = (it["targets"][1], it["targets"][0])
     items = sorted(new + fills, key=lambda it: (it["dt"], it["key_file"]))
+    needed, free = sum(it["size"] for it in items), free_bytes(dest)
     return {"dest": dest, "dest_existing_files": index.file_count,
-            "cards": list(per_card.values()), "items": items}
+            "cards": list(per_card.values()), "items": items,
+            "needed_bytes": needed, "free_bytes": free,
+            "enough_space": not items or needed + SPACE_MARGIN <= free}
 
 
 # ---------------------------------------------------------------- copying
@@ -785,6 +801,17 @@ def print_plan(plan):
     if days:
         print("\n  " + paint("Will be copied into", BOLD))
         print_days([(day, counts(*c)) for day, c in days.items()])
+        print_space(plan)
+
+
+def print_space(plan):
+    where = drive_of(plan["dest"]) or plan["dest"]
+    need, free = human(plan["needed_bytes"]), human(plan["free_bytes"])
+    if plan["enough_space"]:
+        print("\n  " + dim(f"Space: {need} needed {DOT} {free} free on {where}"))
+    else:
+        print("\n  " + bad(f"Not enough space: {need} needed, but only {free} is free on {where}."))
+        print("  " + dim("Free up some space there, or choose another backup folder, then run Sony Import again."))
 
 
 def print_report(rep):
@@ -960,6 +987,8 @@ def interactive(dest):
     if not plan["items"]:
         print("\n  " + ok("Everything on the card is already backed up. Nothing to do."))
         return 0
+    if not plan["enough_space"]:
+        return 1
     if not yes("Start copying?"):
         return 0
 
@@ -1049,6 +1078,10 @@ def main():
     if not plan["items"]:
         print("Nothing new to back up.")
         return 0
+    if not plan["enough_space"]:
+        print(f"Not enough space: {human(plan['needed_bytes'])} needed, "
+              f"{human(plan['free_bytes'])} free in {plan['dest']}. Nothing was copied.", file=sys.stderr)
+        return 3
     rep = run_import(plan)
     print_report(rep)
     if args.report:

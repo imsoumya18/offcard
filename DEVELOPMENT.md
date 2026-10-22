@@ -30,7 +30,10 @@ python3 sony-import.py trash-jpgs --report r.json            # move JPGs that ha
   Interactive mode always asks unless `--dest` is given.
 - **Choosing cards:** `--card PATH` (repeatable) picks specific cards. Otherwise every connected
   Sony card is used.
-- **JSON output:** `--json` gives machine-readable output for `detect` and `plan`.
+- **JSON output:** `--json` gives machine-readable output for `detect` and `plan`. `plan` includes
+  `needed_bytes`, `free_bytes` and `enough_space`.
+- **Exit codes:** `0` OK, `1` some files failed, `2` bad arguments or no card, `3` not enough space
+  on the backup drive (nothing copied).
 - **Progress for scripts:** when output isn't a terminal, there's no colour and no animated bars.
   Copy progress is printed as `PROGRESS NN% ...` lines instead.
 
@@ -57,6 +60,8 @@ python3 sony-import.py trash-jpgs --report r.json            # move JPGs that ha
   whose RAW is backed up is treated as removed on purpose (the Trash option), so it isn't copied back.
 - **Numbering.** New files continue from the highest `DSC#####` / `C#####` already in the backup.
   Orphan `.XML` files count too, so numbers never collide.
+- **Free space.** Before copying, the needed bytes (plus a 50 MB margin) are compared with the free
+  space on the backup drive. The tests fake a full drive with `SONY_IMPORT_TEST_FREE_BYTES`.
 - **Copying.** Each file is written as `*.partial`, its size is checked, and then it's renamed into
   place. The original file timestamp is kept.
 - **Trash.** Uses Finder on macOS, the Recycle Bin via PowerShell on Windows (refused on removable
