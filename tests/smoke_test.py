@@ -7,6 +7,7 @@ Usage:  python tests/smoke_test.py <command to run sony-import...>
 """
 import json
 import os
+import pathlib
 import random
 import struct
 import subprocess
@@ -174,6 +175,20 @@ def main():
             sys.exit("FAIL: a JPG that was removed on purpose would be copied again")
         if verify(tool, dest, card, 0)[:4] != (True, 0, 0, 1):
             sys.exit("FAIL: a JPG removed on purpose should not make the card unsafe")
+
+        # Update notice: a newer release is reported, an older or equal one isn't, offline is quiet.
+        for tag, expected in (("v99.0.0", True), ("v0.0.1", False)):
+            fake = os.path.join(tmp, "latest.json")
+            with open(fake, "w") as f:
+                json.dump({"tag_name": tag}, f)
+            out = json.loads(run(tool + ["check-update", "--json"],
+                                 env={"SONY_IMPORT_UPDATE_URL": pathlib.Path(fake).as_uri()}))
+            if out["update_available"] != expected or out["latest"] != tag[1:]:
+                sys.exit(f"FAIL: update check with {tag}: {out}")
+        missing = pathlib.Path(tmp, "nope.json").as_uri()
+        out = json.loads(run(tool + ["check-update", "--json"], env={"SONY_IMPORT_UPDATE_URL": missing}))
+        if out["latest"] is not None or out["update_available"]:
+            sys.exit(f"FAIL: offline update check should be quiet: {out}")
     print("PASS")
 
 

@@ -945,6 +945,71 @@ def print_report(rep):
         print_days(rows)
 
 
+# ---------------------------------------------------------------- update notice
+
+UPDATE_URL = os.environ.get("SONY_IMPORT_UPDATE_URL",
+                            "https://api.github.com/repos/imsoumya18/sony-import/releases/latest")
+INSTALL_LINE = "curl -fsSL https://raw.githubusercontent.com/imsoumya18/sony-import/main/install.sh | bash"
+RELEASES_PAGE = "https://github.com/imsoumya18/sony-import/releases/latest"
+
+
+def _vtuple(v):
+    return tuple(int(n) for n in re.findall(r"\d+", v or "")[:3])
+
+
+def latest_version(timeout=3):
+    """Latest released version on GitHub ("1.3.0"), or None when offline or unknown."""
+    data = None
+    try:
+        import urllib.request
+        req = urllib.request.Request(UPDATE_URL, headers={"User-Agent": f"sony-import/{__version__}"})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = resp.read()
+    except Exception:
+        # Some Python builds can't find the system's certificates; curl always can.
+        if UPDATE_URL.startswith("https://") and shutil.which("curl"):
+            try:
+                data = subprocess.run(["curl", "-fsSL", "--max-time", str(timeout), UPDATE_URL],
+                                      capture_output=True, timeout=timeout + 2).stdout
+            except Exception:
+                data = None
+    try:
+        return json.loads(data)["tag_name"].lstrip("vV")
+    except Exception:
+        return None
+
+
+class UpdateCheck:
+    """Looks for a newer release in the background, so the app never waits for the network."""
+
+    def __init__(self):
+        self.latest = None
+        if os.environ.get("SONY_IMPORT_NO_UPDATE_CHECK"):
+            self.thread = None
+            return
+        import threading
+        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.thread.start()
+
+    def _run(self):
+        self.latest = latest_version()
+
+    def newer(self):
+        if self.thread:
+            self.thread.join(timeout=0.5)  # by the end of a run it has long finished
+        return self.latest if self.latest and _vtuple(self.latest) > _vtuple(__version__) else None
+
+
+def print_update(latest):
+    print("\n  " + paint(f"A new version of Sony Import is available: v{latest}", BOLD, ACCENT)
+          + dim(f"  (you have v{__version__})"))
+    if IS_WIN:
+        print("  " + dim("Download it here: ") + paint(RELEASES_PAGE, BOLD))
+    else:
+        print("  " + dim("To update, run this line in Terminal:"))
+        print("  " + paint(INSTALL_LINE, BOLD))
+
+
 # ---------------------------------------------------------------- CLI
 
 def ask(q):
@@ -1124,12 +1189,15 @@ def interactive(dest):
 def run_interactive(dest):
     """Wrapper for double-click use: show errors and keep the window open at the end."""
     code = 1
+    update = UpdateCheck()
     try:
         code = interactive(dest)
     except KeyboardInterrupt:
         print("\n\n  " + warn("Stopped. Nothing half-copied was left behind; run again to finish."))
     except Exception as e:
         print("\n\n  " + bad(f"Something went wrong: {e}"))
+    if update.newer():
+        print_update(update.newer())
     ask("\n  " + dim("Press Enter to close this window."))
     return code
 
@@ -1153,6 +1221,8 @@ def main():
     p.add_argument("--dest", default=DEFAULT_DEST)
     p.add_argument("--card", action="append", help="card root; default: all detected")
     p.add_argument("--json", action="store_true")
+    p = sub.add_parser("check-update", help="is a newer release available?")
+    p.add_argument("--json", action="store_true")
     p = sub.add_parser("trash-jpgs", help="move JPGs that have an ARW twin to the Trash")
     p.add_argument("--report", required=True)
     args = ap.parse_args()
@@ -1162,6 +1232,18 @@ def main():
     if args.cmd == "detect":
         info = detect(args.dest)
         print(json.dumps(info, indent=2)) if args.json else print_detect(info)
+        return 0
+    if args.cmd == "check-update":
+        latest = latest_version()
+        newer = bool(latest) and _vtuple(latest) > _vtuple(__version__)
+        if args.json:
+            print(json.dumps({"current": __version__, "latest": latest, "update_available": newer}))
+        elif latest is None:
+            print(f"sony-import {__version__}: could not reach GitHub to check for updates.")
+        elif newer:
+            print_update(latest)
+        else:
+            print(f"sony-import {__version__} is up to date.")
         return 0
     if args.cmd == "trash-jpgs":
         with open(args.report) as f:

@@ -24,6 +24,7 @@ python3 sony-import.py detect --dest "$DEST"                 # find cards, check
 python3 sony-import.py plan   --dest "$DEST"                 # dry run: what would be copied
 python3 sony-import.py import --dest "$DEST" --report r.json # copy, write a JSON report
 python3 sony-import.py verify --dest "$DEST"                 # byte-for-byte check: safe to format?
+python3 sony-import.py check-update [--json]                 # is a newer release out?
 python3 sony-import.py trash-jpgs --report r.json            # move JPGs that have an ARW twin to the Trash
 ```
 
@@ -71,6 +72,12 @@ python3 sony-import.py trash-jpgs --report r.json            # move JPGs that ha
   place. The original file timestamp is kept.
 - **Trash.** Uses Finder on macOS, the Recycle Bin via PowerShell on Windows (refused on removable
   drives, which have no Recycle Bin), and `gio trash` / `trash-cli` on Linux.
+- **Update notice.** Interactive mode only: at startup, a background thread asks the GitHub API
+  for the latest release (3-second timeout). It falls back to `curl` if Python can't verify HTTPS,
+  and says nothing when offline. If the release is newer than `__version__`, a note with the
+  update command is shown at the end. Turn it off with `SONY_IMPORT_NO_UPDATE_CHECK=1`. The URL
+  can be overridden with `SONY_IMPORT_UPDATE_URL`, which the tests use. Subcommands never touch
+  the network, except `check-update`.
 - **Saved settings.** The last chosen backup folder is stored in `~/.sony-import.json`. It's only
   offered as the Enter shortcut, never used without asking.
 
@@ -108,6 +115,7 @@ checks that:
 - `verify` passes after an import, and catches a backup copy with one byte changed (in a spot the
   quick fingerprint doesn't sample) and a missing backup file
 - a full backup drive stops the import before anything is copied (exit code 3)
+- `check-update` reports a newer release, ignores an older one, and stays quiet when offline
 
 ```bash
 python3 tests/smoke_test.py python3 sony-import.py   # test the script

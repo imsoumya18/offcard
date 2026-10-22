@@ -93,6 +93,7 @@ Camera Backup/                ← the folder you chose
 - **Tells you when it's safe to format the card:** an optional byte-for-byte check of every file
   against your backup.
 - **Checks there's enough space** on your backup drive before copying anything.
+- **Tells you when an update is out**, with the one line to install it.
 - **Safe to interrupt.** If you close the window midway, just run it again to finish.
 
 ## Good to know
