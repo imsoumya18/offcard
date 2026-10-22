@@ -61,12 +61,36 @@ case "$(uname -s)" in
     chmod +x "$app/Contents/Resources/sony-import"
     curl -fsSL "$RAW/docs/AppIcon.icns" -o "$app/Contents/Resources/AppIcon.icns" 2>/dev/null || true  # icon is optional
 
-    # The app itself is a tiny launcher that opens the tool in a Terminal window.
+    # The app itself is a tiny launcher that opens the tool in a Terminal window, through a
+    # wrapper that closes that window when the tool ends (Terminal's default is to leave it open).
     cat > "$app/Contents/MacOS/launcher" <<'LAUNCHER'
 #!/bin/bash
-exec open -a Terminal "$(cd "$(dirname "$0")/../Resources" && pwd)/sony-import"
+exec open -a Terminal "$(cd "$(dirname "$0")/../Resources" && pwd)/run"
 LAUNCHER
     chmod +x "$app/Contents/MacOS/launcher"
+
+    cat > "$app/Contents/Resources/run" <<'RUN'
+#!/bin/bash
+# Runs Sony Import, then closes this Terminal window. Only a window whose single tab is this
+# one is closed, so other tabs are never touched.
+"$(dirname "$0")/sony-import"
+code=$?
+me="$(tty)"
+( sleep 0.3
+  osascript - "$me" >/dev/null 2>&1 <<'APPLESCRIPT'
+on run argv
+  tell application "Terminal"
+    repeat with w in windows
+      if (count of tabs of w) is 1 and tty of tab 1 of w is (item 1 of argv) then close w
+    end repeat
+  end tell
+end run
+APPLESCRIPT
+) &
+disown
+exit $code
+RUN
+    chmod +x "$app/Contents/Resources/run"
 
     cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
