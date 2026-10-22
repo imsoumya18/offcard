@@ -611,7 +611,7 @@ class Bar:
             details.append((4, f"{self.files_done}/{self.files_total} files"))
             details.append((2, f"{human(self.done)} of {human(self.total)}"))
             elapsed = time.time() - self.start
-            if elapsed > 1 and self.done:
+            if elapsed > 1 and 0 < self.done < self.total:
                 speed = self.done / elapsed
                 details.append((1, f"{human(speed)}/s"))
                 details.append((3, f"{nice_secs((self.total - self.done) / speed)} left"))
@@ -774,9 +774,9 @@ def print_verify(res):
 
 def offer_verify(dest, cards):
     """Optional last step in the interactive flow."""
-    minutes = max(1, round(card_bytes(cards) / (80 * 1024 * 1024) / 60))
-    if not yes(f"Check every file byte by byte, so you know it's safe to format the card? "
-               f"(about {minutes} min)"):
+    # ~35 MB/s: what a typical USB card reader manages when reading the card and backup in turn
+    minutes = max(1, round(card_bytes(cards) / (35 * 1024 * 1024) / 60))
+    if not yes(f"Check every file byte by byte before formatting? (about {minutes} min)"):
         return None
     heading("Safe to format?")
     res = verify(dest, cards)
