@@ -37,9 +37,11 @@ jobs:
         run: python tests/smoke_test.py python sony-import.py
 
       - name: Build standalone app
+        shell: bash
         run: |
           pip install pyinstaller
-          pyinstaller --onefile --name sony-import sony-import.py
+          ICON=""; if [ "$RUNNER_OS" = "Windows" ]; then ICON="--icon docs/icon.ico"; fi
+          pyinstaller --onefile --name sony-import $ICON sony-import.py
 
       - name: Test the standalone app
         shell: bash
@@ -91,6 +93,26 @@ jobs:
             test -f "$HOME/.local/share/applications/sony-import.desktop"
             "$RUNNER_TEMP/bin/sony-import" --version
           fi
+
+  installer-windows:
+    # Runs install.ps1 the way users do (irm | iex) in Windows PowerShell 5.1, against the latest release.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install with the one-line installer
+        shell: powershell
+        env:
+          SONY_IMPORT_INSTALL_DIR: ${{ runner.temp }}\SonyImport
+          SONY_IMPORT_START_MENU: ${{ runner.temp }}\StartMenu
+        run: Get-Content install.ps1 -Raw | Invoke-Expression
+      - name: Check the installed app runs
+        shell: powershell
+        run: |
+          $exe = Join-Path $env:RUNNER_TEMP 'SonyImport\sony-import.exe'
+          & $exe --version
+          if ($LASTEXITCODE -ne 0) { throw 'the installed app did not run' }
+          if (-not (Test-Path (Join-Path $env:RUNNER_TEMP 'StartMenu\Sony Import.lnk'))) { throw 'no Start menu shortcut' }
+          if (Get-Item $exe -Stream Zone.Identifier -ErrorAction SilentlyContinue) { throw 'the app is marked as downloaded from the internet' }
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')

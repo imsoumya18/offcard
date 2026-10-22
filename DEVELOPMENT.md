@@ -122,7 +122,20 @@ python3 tests/smoke_test.py python3 sony-import.py   # test the script
 python3 tests/smoke_test.py ./dist/sony-import       # test a built app
 ```
 
-## The one-line installer
+## The one-line installers
+
+### Windows: `install.ps1`
+
+The README's PowerShell line runs `irm …/install.ps1 | iex` (Windows PowerShell 5.1 or later).
+It downloads `sony-import-windows.exe` into `%LOCALAPPDATA%\Programs\Sony Import`, which needs no
+admin rights, and adds a **Sony Import** Start-menu shortcut. Files downloaded by
+`Invoke-WebRequest` don't get the Mark-of-the-Web, so SmartScreen doesn't warn; `Unblock-File`
+makes sure of it. The script runs inside `& { … }` and never calls `exit`, so a failure can't close
+the user's PowerShell window. The Windows build embeds [`docs/icon.ico`](docs/icon.ico).
+
+Overrides, used by CI: `SONY_IMPORT_RELEASES`, `SONY_IMPORT_INSTALL_DIR`, `SONY_IMPORT_START_MENU`.
+
+### macOS and Linux: `install.sh`
 
 [`install.sh`](install.sh) is what the README's Terminal line runs (macOS and Linux). It downloads
 the latest release with `curl` and installs it:
@@ -151,7 +164,7 @@ The icon source is [`docs/icon.png`](docs/icon.png) (1024 px). It's drawn in the
 
 [GitHub Actions](.github/workflows/build.yml) builds standalone apps with PyInstaller on Windows,
 macOS (Apple Silicon and Intel) and Linux, and runs the smoke test against each one. It also runs
-the one-line installer on Linux and both Macs. This happens on every push. Pushing a version tag also publishes the apps as a GitHub Release:
+the one-line installers on Windows (PowerShell 5.1), Linux and both Macs. This happens on every push. Pushing a version tag also publishes the apps as a GitHub Release:
 
 ```bash
 git tag v1.2.0 && git push origin v1.2.0

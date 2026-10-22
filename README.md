@@ -29,17 +29,25 @@ Back up the photos and videos from your Sony camera's memory card, neatly sorted
 It picks the right version for your Mac (Apple or Intel chip) by itself. To update, run the same
 line again. The same command also works on **Linux**.
 
-### Windows
+### Windows: one line, no security warnings
 
-Download **[sony-import-windows.exe](https://github.com/imsoumya18/sony-import/releases/latest/download/sony-import-windows.exe)**
-and double-click it. The first time, Windows may say "Windows protected your PC". Click
-**More info** → **Run anyway**.
+1. Open **PowerShell**: click Start, type `PowerShell`, press <kbd>Enter</kbd>.
+2. Paste this line and press <kbd>Enter</kbd>:
+
+   ```powershell
+   irm https://raw.githubusercontent.com/imsoumya18/sony-import/main/install.ps1 | iex
+   ```
+
+3. **Sony Import** is now in your Start menu. Search for it whenever you want to back up a card.
+
+To update, run the same line again. No admin rights needed.
 
 <details>
-<summary>Prefer to download the Mac or Linux app directly?</summary>
+<summary>Prefer to download the app directly?</summary>
 
 | Your computer | Download |
 |---|---|
+| Windows | [sony-import-windows.exe](https://github.com/imsoumya18/sony-import/releases/latest/download/sony-import-windows.exe) |
 | Mac with Apple chip (M1, M2, M3…) | [sony-import-macos-apple-silicon.zip](https://github.com/imsoumya18/sony-import/releases/latest/download/sony-import-macos-apple-silicon.zip) |
 | Mac with Intel chip | [sony-import-macos-intel.zip](https://github.com/imsoumya18/sony-import/releases/latest/download/sony-import-macos-intel.zip) |
 | Linux (64-bit) | [sony-import-linux.zip](https://github.com/imsoumya18/sony-import/releases/latest/download/sony-import-linux.zip) |
@@ -51,13 +59,15 @@ and double-click it. The first time, Windows may say "Windows protected your PC"
   3. Scroll down and click **Open Anyway**.
 
   The Terminal line above avoids this, which is why it's the recommended way.
+- **Windows:** double-click it. On "Windows protected your PC", click **More info** → **Run anyway**.
+  The PowerShell line above avoids this.
 - **Linux:** unzip it, open a terminal in that folder and run `./sony-import`.
 </details>
 
 ## How to use it
 
 1. Put the memory card in your computer, and plug in the drive you back up to.
-2. Open **Sony Import** (or `sony-import-windows.exe` on Windows).
+2. Open **Sony Import** from Applications (Mac) or the Start menu (Windows).
 3. **Choose your backup folder:** drag the folder into the window and press Enter. It can be any
    folder on any drive. Next time, just press Enter to reuse it.
 4. Check what it found, type `y` to start copying, and wait for **All done**.

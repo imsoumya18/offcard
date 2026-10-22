@@ -950,7 +950,7 @@ def print_report(rep):
 UPDATE_URL = os.environ.get("SONY_IMPORT_UPDATE_URL",
                             "https://api.github.com/repos/imsoumya18/sony-import/releases/latest")
 INSTALL_LINE = "curl -fsSL https://raw.githubusercontent.com/imsoumya18/sony-import/main/install.sh | bash"
-RELEASES_PAGE = "https://github.com/imsoumya18/sony-import/releases/latest"
+INSTALL_LINE_WIN = "irm https://raw.githubusercontent.com/imsoumya18/sony-import/main/install.ps1 | iex"
 
 
 def _vtuple(v):
@@ -1003,11 +1003,8 @@ class UpdateCheck:
 def print_update(latest):
     print("\n  " + paint(f"A new version of Sony Import is available: v{latest}", BOLD, ACCENT)
           + dim(f"  (you have v{__version__})"))
-    if IS_WIN:
-        print("  " + dim("Download it here: ") + paint(RELEASES_PAGE, BOLD))
-    else:
-        print("  " + dim("To update, run this line in Terminal:"))
-        print("  " + paint(INSTALL_LINE, BOLD))
+    print("  " + dim(f"To update, run this line in {'PowerShell' if IS_WIN else 'Terminal'}:"))
+    print("  " + paint(INSTALL_LINE_WIN if IS_WIN else INSTALL_LINE, BOLD))
 
 
 # ---------------------------------------------------------------- CLI
