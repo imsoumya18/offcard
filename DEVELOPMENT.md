@@ -167,7 +167,7 @@ macOS (Apple Silicon and Intel) and Linux, and runs the smoke test against each 
 the one-line installers on Windows (PowerShell 5.1), Linux and both Macs. This happens on every push. Pushing a version tag also publishes the apps as a GitHub Release:
 
 ```bash
-git tag v1.3.0 && git push origin v1.3.0
+git tag v1.3.1 && git push origin v1.3.1
 ```
 
 Bump `__version__` in `sony-import.py` first; the app shows it in its banner.
