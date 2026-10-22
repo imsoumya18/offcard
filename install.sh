@@ -61,10 +61,34 @@ case "$(uname -s)" in
     chmod +x "$app/Contents/Resources/sony-import"
     curl -fsSL "$RAW/docs/AppIcon.icns" -o "$app/Contents/Resources/AppIcon.icns" 2>/dev/null || true  # icon is optional
 
-    # The app itself is a tiny launcher that opens the tool in a Terminal window.
+    # The app itself is a tiny launcher that opens the tool in a Terminal window. It goes through
+    # a Terminal settings file that closes the window when the tool ends (Terminal's default is to
+    # leave it open). The file is written on every launch, so the app still works if it's moved.
     cat > "$app/Contents/MacOS/launcher" <<'LAUNCHER'
 #!/bin/bash
-exec open -a Terminal "$(cd "$(dirname "$0")/../Resources" && pwd)/sony-import"
+bin="$(cd "$(dirname "$0")/../Resources" && pwd)/sony-import"
+sq="'"; esc="'\\''"
+q="'${bin//$sq/$esc}'"                                    # quote the path for the shell
+q="${q//&/&amp;}"; q="${q//</&lt;}"; q="${q//>/&gt;}"     # and escape it for XML
+settings="${TMPDIR:-/tmp}/Sony Import.terminal"
+cat > "$settings" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>name</key><string>Sony Import</string>
+  <key>type</key><string>Window Settings</string>
+  <key>ProfileCurrentVersion</key><real>2.07</real>
+  <key>CommandString</key><string>exec $q</string>
+  <key>RunCommandAsShell</key><false/>
+  <key>shellExitAction</key><integer>0</integer>
+  <key>WindowTitle</key><string>Sony Import</string>
+  <key>columnCount</key><integer>100</integer>
+  <key>rowCount</key><integer>40</integer>
+</dict>
+</plist>
+EOF
+exec open -a Terminal "$settings"
 LAUNCHER
     chmod +x "$app/Contents/MacOS/launcher"
 
