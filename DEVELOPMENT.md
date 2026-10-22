@@ -23,6 +23,7 @@ Non-interactive subcommands:
 python3 sony-import.py detect --dest "$DEST"                 # find cards, check the backup drive
 python3 sony-import.py plan   --dest "$DEST"                 # dry run: what would be copied
 python3 sony-import.py import --dest "$DEST" --report r.json # copy, write a JSON report
+python3 sony-import.py verify --dest "$DEST"                 # byte-for-byte check: safe to format?
 python3 sony-import.py trash-jpgs --report r.json            # move JPGs that have an ARW twin to the Trash
 ```
 
@@ -32,8 +33,8 @@ python3 sony-import.py trash-jpgs --report r.json            # move JPGs that ha
   Sony card is used.
 - **JSON output:** `--json` gives machine-readable output for `detect` and `plan`. `plan` includes
   `needed_bytes`, `free_bytes` and `enough_space`.
-- **Exit codes:** `0` OK, `1` some files failed, `2` bad arguments or no card, `3` not enough space
-  on the backup drive (nothing copied).
+- **Exit codes:** `0` OK, `1` some files failed (for `verify`: not safe to format), `2` bad
+  arguments or no card, `3` not enough space on the backup drive (nothing copied).
 - **Progress for scripts:** when output isn't a terminal, there's no colour and no animated bars.
   Copy progress is printed as `PROGRESS NN% ...` lines instead.
 
@@ -62,6 +63,10 @@ python3 sony-import.py trash-jpgs --report r.json            # move JPGs that ha
   Orphan `.XML` files count too, so numbers never collide.
 - **Free space.** Before copying, the needed bytes (plus a 50 MB margin) are compared with the free
   space on the backup drive. The tests fake a full drive with `SONY_IMPORT_TEST_FREE_BYTES`.
+- **Verify ("safe to format?").** Every card file is located in the backup by size + fingerprint,
+  then compared in full, byte for byte. A file can come out *verified*, *missing*, or *different*
+  (a damaged copy). A JPG whose RAW is backed up but which is itself missing counts as trashed on
+  purpose, which is not a failure. The card is safe only if nothing is missing or different.
 - **Copying.** Each file is written as `*.partial`, its size is checked, and then it's renamed into
   place. The original file timestamp is kept.
 - **Trash.** Uses Finder on macOS, the Recycle Bin via PowerShell on Windows (refused on removable
@@ -100,6 +105,9 @@ checks that:
 - a deleted single photo comes back once
 - renamed files are still recognised
 - a JPG trashed on purpose isn't brought back
+- `verify` passes after an import, and catches a backup copy with one byte changed (in a spot the
+  quick fingerprint doesn't sample) and a missing backup file
+- a full backup drive stops the import before anything is copied (exit code 3)
 
 ```bash
 python3 tests/smoke_test.py python3 sony-import.py   # test the script

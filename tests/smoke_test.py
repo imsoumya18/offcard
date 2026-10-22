@@ -86,6 +86,12 @@ def check_tree(dest, what):
         sys.exit(f"FAIL ({what}): unexpected backup tree\n  missing: {EXPECTED - got}\n  extra: {got - EXPECTED}")
 
 
+def verify(tool, dest, card, expect):
+    res = json.loads(run(tool + ["verify", "--dest", dest, "--card", card, "--json"], expect=expect))
+    st = res["cards"][0]
+    return res["safe"], len(st["missing"]), len(st["different"]), len(st["trashed_jpg"]), st["verified"]
+
+
 def new_items(tool, dest, card):
     return json.loads(run(tool + ["plan", "--dest", dest, "--card", card, "--json"]))["new_items"]
 
@@ -123,6 +129,24 @@ def main():
         if new_items(tool, dest, card) != 0:
             sys.exit("FAIL: second run wants to copy files again")
 
+        # "Safe to format" check: everything verified byte for byte.
+        if verify(tool, dest, card, 0) != (True, 0, 0, 0, 7):
+            sys.exit(f"FAIL: verify after import: {verify(tool, dest, card, 0)}")
+        # One byte changed where the quick fingerprint doesn't look -> caught as different.
+        victim = os.path.join(dest, "2026", "2. February", "10Feb26", "DSC00002.ARW")
+        with open(victim, "r+b") as f:
+            f.seek(100_000); b = f.read(1); f.seek(100_000); f.write(bytes([b[0] ^ 0xFF]))
+        if verify(tool, dest, card, 1)[:3] != (False, 0, 1):
+            sys.exit("FAIL: a damaged backup copy was not detected")
+        with open(victim, "r+b") as f:
+            f.seek(100_000); f.write(b)
+        # A backup file missing -> caught as missing.
+        moved = victim + ".away"
+        os.rename(victim, moved)
+        if verify(tool, dest, card, 1)[:3] != (False, 1, 0):
+            sys.exit("FAIL: a missing backup file was not detected")
+        os.rename(moved, victim)
+
         for rel in REPAIRS:
             os.remove(os.path.join(dest, *rel))
             run(tool + ["import", "--dest", dest, "--card", card])
@@ -148,6 +172,8 @@ def main():
         os.remove(os.path.join(dest, *DAY, "DSC00001.JPG"))
         if new_items(tool, dest, card) != 0:
             sys.exit("FAIL: a JPG that was removed on purpose would be copied again")
+        if verify(tool, dest, card, 0)[:4] != (True, 0, 0, 1):
+            sys.exit("FAIL: a JPG removed on purpose should not make the card unsafe")
     print("PASS")
 
 

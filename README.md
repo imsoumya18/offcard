@@ -61,6 +61,8 @@ and double-click it. The first time, Windows may say "Windows protected your PC"
 3. **Choose your backup folder:** drag the folder into the window and press Enter. It can be any
    folder on any drive. Next time, just press Enter to reuse it.
 4. Check what it found, type `y` to start copying, and wait for **All done**.
+5. Want to format the card afterwards? Say `y` when it offers to **check every file byte by byte**.
+   It tells you when it's safe to format the card in your camera.
 
 That's it. You can safely eject the card.
 
@@ -88,6 +90,8 @@ Camera Backup/                ← the folder you chose
 - **Gives every file one clean number** in shooting order (`DSC00001`…, `C00001`…), so names
   never clash.
 - **Shot in RAW + JPG?** It offers to move the extra JPGs to the Trash. You can restore them from there.
+- **Tells you when it's safe to format the card:** an optional byte-for-byte check of every file
+  against your backup.
 - **Checks there's enough space** on your backup drive before copying anything.
 - **Safe to interrupt.** If you close the window midway, just run it again to finish.
 

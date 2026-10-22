@@ -118,6 +118,12 @@ def step(n, total, title):
     print("\n" + paint(head + rule * max(0, 60 - len(head)), BOLD, ACCENT))
 
 
+def heading(title):
+    rule = "─" if FANCY else "-"
+    head = f"{rule * 2} {title} "
+    print("\n" + paint(head + rule * max(0, 60 - len(head)), BOLD, ACCENT))
+
+
 def nice_dt(dt):
     d = datetime.strptime(dt[:19], "%Y:%m:%d %H:%M:%S")
     return f"{d.day} {MONTHS[d.month][:3]} {d.year}, {d:%H:%M}"
@@ -410,16 +416,22 @@ class DestIndex:
                 if m and ext in (".MP4", ".XML"):  # count orphan XMLs too, so numbers never collide
                     self.max_video = max(self.max_video, int(m.group(1)))
 
-    def find(self, size, fp, ext):
-        """Path of the backed-up copy of a card file, or None."""
+    def find_all(self, size, fp, ext):
+        """Paths in the backup that match a card file by size + fingerprint."""
+        found = []
         for p in self.by_size.get(size, []):
             if os.path.splitext(p)[1].upper() != ext:
                 continue
             if p not in self._fp_cache:
                 self._fp_cache[p] = fingerprint(p)
             if self._fp_cache[p] == fp:
-                return p
-        return None
+                found.append(p)
+        return found
+
+    def find(self, size, fp, ext):
+        """Path of the backed-up copy of a card file, or None."""
+        found = self.find_all(size, fp, ext)
+        return found[0] if found else None
 
 
 # ---------------------------------------------------------------- planning
@@ -673,6 +685,103 @@ def run_import(plan):
             day[key] += n
     return {"dest": plan["dest"], "copied": copied, "errors": errors,
             "raw_jpg_pairs": pairs, "by_day": by_day, "seconds": round(seconds, 1)}
+
+
+# ---------------------------------------------------------------- verification
+
+def same_bytes(a, b, bar=None):
+    """True if two files are byte-for-byte identical. Reports a's size to the bar either way."""
+    size, done = os.path.getsize(a), 0
+    try:
+        with open(a, "rb") as fa, open(b, "rb") as fb:
+            while True:
+                x, y = fa.read(CHUNK), fb.read(CHUNK)
+                if x != y:
+                    return False
+                if not x:
+                    return True
+                done += len(x)
+                if bar:
+                    bar.update(len(x))
+    finally:
+        if bar and size > done:
+            bar.update(size - done)
+
+
+def card_bytes(cards):
+    return sum(os.path.getsize(f) for c in cards for it in scan_card(c) for f in it["files"])
+
+
+def verify(dest, cards, quiet=False):
+    """Check that every file on the cards has a byte-for-byte identical copy in the backup."""
+    index = DestIndex(dest)
+    listed = [(card, scan_card(card)) for card in cards]
+    bar = Bar(sum(len(items) for _, items in listed), "Checking", ACCENT)
+    jobs, per_card = [], []
+    for card, items in listed:
+        st = {"card": card, "files": 0, "verified": 0, "missing": [], "different": [], "trashed_jpg": []}
+        per_card.append(st)
+        for it in items:
+            read_item(it)
+            bar.update(1)
+            exts = [os.path.splitext(f)[1].upper() for f in it["files"]]
+            cands = [index.find_all(sz, fp, ext) for sz, fp, ext in zip(it["sizes"], it["fps"], exts)]
+            for i, (src, sz) in enumerate(zip(it["files"], it["sizes"])):
+                st["files"] += 1
+                if cands[i]:
+                    jobs.append((st, src, cands[i], sz))
+                elif it["kind"] == "pair" and i == 0 and cands[1]:
+                    st["trashed_jpg"].append(src)  # JPG removed on purpose; its RAW is checked
+                else:
+                    st["missing"].append(src)
+    bar.finish()
+    vbar = Bar(sum(j[3] for j in jobs), "Verifying", ACCENT, nbytes=True, files_total=len(jobs),
+               log=not quiet)
+    for st, src, cands, _ in jobs:
+        if same_bytes(src, cands[0], vbar) or any(same_bytes(src, c) for c in cands[1:]):
+            st["verified"] += 1
+        else:
+            st["different"].append(src)
+        vbar.update(0, file_done=True)
+    seconds = vbar.finish()
+    return {"dest": dest, "cards": per_card, "seconds": round(seconds, 1),
+            "safe": all(not st["missing"] and not st["different"] for st in per_card)}
+
+
+def print_verify(res):
+    print()
+    for st in res["cards"]:
+        problems = [(f, "not in the backup") for f in st["missing"]] + \
+                   [(f, "backup copy is different (damaged?)") for f in st["different"]]
+        if not problems:
+            print("  " + ok(f"All {st['files']} files on {st['card']} are safely backed up, byte for byte."))
+            print("    " + paint("You can format this card in the camera.", BOLD))
+        else:
+            n = len(problems)
+            print("  " + bad(f"{n} file{'s are' if n != 1 else ' is'} not safely backed up "
+                             f"from {st['card']}. Don't format this card yet."))
+            for f, why in problems[:20]:
+                print("    " + paint(os.path.basename(f), BOLD) + dim(f"  {why}"))
+            if n > 20:
+                print("    " + dim(f"... and {n - 20} more"))
+            print("    " + dim("Run Sony Import again to copy them, then check again."))
+        if st["trashed_jpg"]:
+            n = len(st["trashed_jpg"])
+            print("    " + dim(f"{n} JPG{'s' * (n != 1)} not in the backup because you moved "
+                             f"{'them' if n != 1 else 'it'} to the {TRASH}; the RAW "
+                             f"file{'s are' if n != 1 else ' is'} safe."))
+
+
+def offer_verify(dest, cards):
+    """Optional last step in the interactive flow."""
+    minutes = max(1, round(card_bytes(cards) / (80 * 1024 * 1024) / 60))
+    if not yes(f"Check every file byte by byte, so you know it's safe to format the card? "
+               f"(about {minutes} min)"):
+        return None
+    heading("Safe to format?")
+    res = verify(dest, cards)
+    print_verify(res)
+    return res
 
 
 def _windows_drive_is_removable(path):
@@ -985,7 +1094,8 @@ def interactive(dest):
     plan = build_plan(dest, info["cards"])
     print_plan(plan)
     if not plan["items"]:
-        print("\n  " + ok("Everything on the card is already backed up. Nothing to do."))
+        print("\n  " + ok("Everything on the card is already backed up. Nothing to copy."))
+        offer_verify(dest, info["cards"])
         return 0
     if not plan["enough_space"]:
         return 1
@@ -1005,9 +1115,10 @@ def interactive(dest):
                 print("\n  " + bad(f"Could not move the JPGs: {e}"))
     if rep["errors"]:
         print("\n  " + bad("Some files were not copied. Run Sony Import again to retry them."))
-    else:
-        print("\n  " + ok("All done. You can safely remove the memory card."))
-    return 1 if rep["errors"] else 0
+        return 1
+    offer_verify(dest, info["cards"])
+    print("\n  " + ok("All done. You can safely remove the memory card."))
+    return 0
 
 
 def run_interactive(dest):
@@ -1038,6 +1149,10 @@ def main():
         p.add_argument("--json", action="store_true")
         if name == "import":
             p.add_argument("--report", help="write the final report JSON here")
+    p = sub.add_parser("verify", help="check every card file byte by byte against the backup")
+    p.add_argument("--dest", default=DEFAULT_DEST)
+    p.add_argument("--card", action="append", help="card root; default: all detected")
+    p.add_argument("--json", action="store_true")
     p = sub.add_parser("trash-jpgs", help="move JPGs that have an ARW twin to the Trash")
     p.add_argument("--report", required=True)
     args = ap.parse_args()
@@ -1066,6 +1181,10 @@ def main():
     if not cards:
         print("No Sony camera card found.", file=sys.stderr)
         return 2
+    if args.cmd == "verify":
+        res = verify(os.path.abspath(args.dest), cards, quiet=args.json)
+        print(json.dumps(res, indent=2)) if args.json else print_verify(res)
+        return 0 if res["safe"] else 1
     plan = build_plan(os.path.abspath(args.dest), cards)
     if args.cmd == "plan":
         if args.json:
