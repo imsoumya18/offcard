@@ -5,7 +5,7 @@ when a new version is out.
 
 ShotLoft was called **Sony Import** up to v2.0.0.
 
-## [Unreleased]
+## [2.1.0] - 2026-10-24
 
 - **Sony Import is now ShotLoft.** A new name for an app that does more than import: it backs up,
   checks, organises, and will keep growing. To switch, run the install line from the README once.
