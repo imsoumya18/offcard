@@ -29,7 +29,7 @@
     try {
         Step 'Downloading the latest version for Windows...'
         New-Item -ItemType Directory -Force -Path $installDir | Out-Null
-        $exe = Join-Path $installDir 'sony-import.exe'
+        $exe = Join-Path $installDir 'Sony Import.exe'
         $tmp = "$exe.download"
         Invoke-WebRequest -Uri "$releases/sony-import-windows.exe" -OutFile $tmp -UseBasicParsing
         Unblock-File -Path $tmp   # make sure nothing carries the "from the internet" mark
@@ -42,7 +42,7 @@
             Fail 'Sony Import is still open. Close it and run this line again.'
             return
         }
-        $version = ((& $exe --version) -replace 'sony-import\s*', '').Trim()
+        Remove-Item -Force (Join-Path $installDir 'sony-import.exe') -ErrorAction SilentlyContinue  # older terminal version
 
         New-Item -ItemType Directory -Force -Path $startMenu | Out-Null
         $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $startMenu 'Sony Import.lnk'))
@@ -57,7 +57,7 @@
     }
 
     Write-Host ''
-    Write-Host "  Sony Import $version is installed." -ForegroundColor Green
+    Write-Host '  Sony Import is installed.' -ForegroundColor Green
     Write-Host ''
     Write-Host '  Open it from the Start menu: search for ' -NoNewline; Write-Host 'Sony Import' -ForegroundColor DarkCyan
     Write-Host '  To update later, run the same line again.' -ForegroundColor DarkGray

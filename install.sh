@@ -4,8 +4,8 @@
 #   curl -fsSL https://raw.githubusercontent.com/imsoumya18/sony-import/main/install.sh | bash
 #
 # Downloads the latest release for this computer and installs it:
-#   macOS: "Sony Import.app" in /Applications (or ~/Applications), opens in Terminal
-#   Linux: ~/.local/bin/sony-import plus an app-menu entry
+#   macOS: the Sony Import app in /Applications (or ~/Applications)
+#   Linux: ~/.local/bin/sony-import plus an app-menu entry (the app opens in the browser)
 # Files downloaded this way don't get macOS's "downloaded from the internet" mark, so the app
 # opens without the Gatekeeper warning. Run the same command again to update.
 set -euo pipefail
@@ -42,8 +42,8 @@ case "$(uname -s)" in
     fi
     step "Downloading the latest version for Mac ($chip)..."
     download "$RELEASES/$zip" "$tmp/app.zip"
-    unzip -q "$tmp/app.zip" -d "$tmp" || fail "Could not unpack the download"
-    version="$("$tmp/sony-import" --version 2>/dev/null | awk '{print $2}')" || version=""
+    ditto -x -k "$tmp/app.zip" "$tmp" || fail "Could not unpack the download"
+    [ -d "$tmp/Sony Import.app" ] || fail "The download doesn't contain Sony Import.app"
 
     if [ -n "${SONY_IMPORT_APPS_DIR:-}" ]; then
       apps="$SONY_IMPORT_APPS_DIR"          # explicit choice: create it if needed
@@ -54,63 +54,15 @@ case "$(uname -s)" in
     fi
     mkdir -p "$apps" || fail "Could not create $apps"
     app="$apps/Sony Import.app"
+    if pgrep -f "Sony Import.app/Contents/MacOS/Sony Import" >/dev/null 2>&1; then
+      fail "Sony Import is open. Quit it, then run this line again."
+    fi
     step "Installing to $app ..."
-    rm -rf "$app"
-    mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-    cp "$tmp/sony-import" "$app/Contents/Resources/sony-import"
-    chmod +x "$app/Contents/Resources/sony-import"
-    curl -fsSL "$RAW/docs/AppIcon.icns" -o "$app/Contents/Resources/AppIcon.icns" 2>/dev/null || true  # icon is optional
-
-    # The app itself is a tiny launcher that opens the tool in a Terminal window, through a
-    # wrapper that closes that window when the tool ends (Terminal's default is to leave it open).
-    cat > "$app/Contents/MacOS/launcher" <<'LAUNCHER'
-#!/bin/bash
-exec open -a Terminal "$(cd "$(dirname "$0")/../Resources" && pwd)/run"
-LAUNCHER
-    chmod +x "$app/Contents/MacOS/launcher"
-
-    cat > "$app/Contents/Resources/run" <<'RUN'
-#!/bin/bash
-# Runs Sony Import, then closes this Terminal window. Only a window whose single tab is this
-# one is closed, so other tabs are never touched.
-"$(dirname "$0")/sony-import"
-code=$?
-me="$(tty)"
-( sleep 0.3
-  osascript - "$me" >/dev/null 2>&1 <<'APPLESCRIPT'
-on run argv
-  tell application "Terminal"
-    repeat with w in windows
-      if (count of tabs of w) is 1 and tty of tab 1 of w is (item 1 of argv) then close w
-    end repeat
-  end tell
-end run
-APPLESCRIPT
-) &
-disown
-exit $code
-RUN
-    chmod +x "$app/Contents/Resources/run"
-
-    cat > "$app/Contents/Info.plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleName</key><string>Sony Import</string>
-  <key>CFBundleDisplayName</key><string>Sony Import</string>
-  <key>CFBundleIdentifier</key><string>io.github.imsoumya18.sony-import</string>
-  <key>CFBundleExecutable</key><string>launcher</string>
-  <key>CFBundleIconFile</key><string>AppIcon</string>
-  <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>${version:-1.0}</string>
-  <key>CFBundleVersion</key><string>${version:-1.0}</string>
-  <key>LSMinimumSystemVersion</key><string>10.15</string>
-</dict>
-</plist>
-PLIST
+    rm -rf "$app"                            # also replaces the older Terminal-based version
+    ditto "$tmp/Sony Import.app" "$app" || fail "Could not install to $apps"
     xattr -cr "$app" 2>/dev/null || true   # make sure nothing carries the "from the internet" mark
     touch "$app"                           # refresh the Finder / Launchpad icon
+    version="$("$app/Contents/MacOS/Sony Import" --version 2>/dev/null | awk '{print $2}')" || version=""
 
     printf '\n  %s✓ Sony Import %s is installed.%s\n\n' "$GREEN" "${version}" "$OFF"
     say "Open it from your Applications folder or Launchpad: ${TEAL}Sony Import${OFF}"
@@ -134,6 +86,7 @@ PLIST
     apps_dir="${XDG_DATA_HOME:-$HOME/.local/share}"
     mkdir -p "$apps_dir/applications" "$apps_dir/icons"
     curl -fsSL "$RAW/docs/icon.png" -o "$apps_dir/icons/sony-import.png" 2>/dev/null || true  # icon is optional
+    # The app opens in your browser on Linux; no terminal window needed.
     cat > "$apps_dir/applications/sony-import.desktop" <<DESKTOP
 [Desktop Entry]
 Type=Application
@@ -141,21 +94,17 @@ Name=Sony Import
 Comment=Back up your Sony camera card, sorted by date
 Exec=$bin/sony-import
 Icon=$apps_dir/icons/sony-import.png
-Terminal=true
+Terminal=false
 Categories=Graphics;Photography;
 DESKTOP
 
     printf '\n  %s✓ Sony Import %s is installed.%s\n\n' "$GREEN" "${version}" "$OFF"
-    say "Open ${TEAL}Sony Import${OFF} from your app menu, or run: sony-import"
-    case ":$PATH:" in
-      *":$bin:"*) ;;
-      *) say "${DIM}(To run it by name, add $bin to your PATH.)${OFF}" ;;
-    esac
+    say "Open ${TEAL}Sony Import${OFF} from your app menu. It opens in your web browser."
     say "${DIM}To update later, run the same command again.${OFF}"
     echo
     ;;
 
   *)
-    fail "This installer is for macOS and Linux. On Windows, download sony-import-windows.exe from the README."
+    fail "This installer is for macOS and Linux. On Windows, use the PowerShell line from the README."
     ;;
 esac
