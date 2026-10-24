@@ -3,7 +3,7 @@
 To update, run the install line from the [README](README.md#install) again. The app tells you
 when a new version is out.
 
-## [Unreleased]
+## [2.0.0] - 2026-10-24
 
 - **Sony Import is now a desktop app.** One window instead of a terminal: your card and backup
   folder, what's new and what's already backed up, and one **Back up** button with a progress bar.
