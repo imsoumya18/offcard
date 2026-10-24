@@ -187,4 +187,4 @@ jobs:
             echo "::warning::CHANGELOG.md has no section for $GITHUB_REF_NAME; using GitHub's automatic notes"
             NOTES=(--generate-notes)
           fi
-          gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" --title "ShotLoft ${GITHUB_REF_NAME#v}" "${NOTES[@]}"
+          gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" "${NOTES[@]}"
