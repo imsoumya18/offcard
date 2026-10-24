@@ -1,18 +1,18 @@
 #!/bin/bash
-# Sony Import installer for macOS and Linux.
+# ShotLoft installer for macOS and Linux.
 #
-#   curl -fsSL https://raw.githubusercontent.com/imsoumya18/sony-import/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/imsoumya18/shotloft/main/install.sh | bash
 #
 # Downloads the latest release for this computer and installs it:
-#   macOS: the Sony Import app in /Applications (or ~/Applications)
-#   Linux: ~/.local/bin/sony-import plus an app-menu entry (the app opens in the browser)
+#   macOS: the ShotLoft app in /Applications (or ~/Applications)
+#   Linux: ~/.local/bin/shotloft plus an app-menu entry (the app opens in the browser)
 # Files downloaded this way don't get macOS's "downloaded from the internet" mark, so the app
 # opens without the Gatekeeper warning. Run the same command again to update.
 set -euo pipefail
 
-REPO="imsoumya18/sony-import"
-RELEASES="${SONY_IMPORT_RELEASES:-https://github.com/$REPO/releases/latest/download}"
-RAW="${SONY_IMPORT_RAW:-https://raw.githubusercontent.com/$REPO/main}"
+REPO="imsoumya18/shotloft"
+RELEASES="${SHOTLOFT_RELEASES:-https://github.com/$REPO/releases/latest/download}"
+RAW="${SHOTLOFT_RAW:-https://raw.githubusercontent.com/$REPO/main}"
 
 if [ -t 1 ]; then
   TEAL=$'\033[1;38;5;30m'; GREEN=$'\033[1;38;5;28m'; RED=$'\033[1;38;5;167m'; DIM=$'\033[2m'; OFF=$'\033[0m'
@@ -23,52 +23,77 @@ say()  { printf '  %s\n' "$*"; }
 step() { printf '  %s›%s %s\n' "$TEAL" "$OFF" "$*"; }
 fail() { printf '\n  %s✗ %s%s\n\n' "$RED" "$*" "$OFF" >&2; exit 1; }
 
-printf '\n  %sSony Import installer%s\n\n' "$TEAL" "$OFF"
+printf '\n  %sShotLoft installer%s\n\n' "$TEAL" "$OFF"
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-download() {  # url, file
-  curl -fsSL --retry 2 "$1" -o "$2" || fail "Download failed: $1 (check your internet connection)"
+download() {  # file, then one or more release file names to try in order
+  local out="$1"; shift
+  for name in "$@"; do
+    curl -fsSL --retry 2 "$RELEASES/$name" -o "$out" 2>/dev/null && return 0
+  done
+  fail "Download failed (check your internet connection)"
 }
+
+# ShotLoft was called Sony Import until v2.0.0. Until the first ShotLoft release exists, fall back
+# to the last Sony Import one; after installing, remove the old Sony Import app if it's ours.
+OLD_BUNDLE_ID="io.github.imsoumya18.sony-import"
 
 case "$(uname -s)" in
   Darwin)
     # Apple chip even when Terminal runs under Rosetta
     if [ "$(sysctl -n hw.optional.arm64 2>/dev/null || echo 0)" = "1" ]; then
-      zip="sony-import-macos-apple-silicon.zip"; chip="Apple chip"
+      arch="apple-silicon"; chip="Apple chip"
     else
-      zip="sony-import-macos-intel.zip"; chip="Intel chip"
+      arch="intel"; chip="Intel chip"
     fi
     step "Downloading the latest version for Mac ($chip)..."
-    download "$RELEASES/$zip" "$tmp/app.zip"
-    ditto -x -k "$tmp/app.zip" "$tmp" || fail "Could not unpack the download"
-    [ -d "$tmp/Sony Import.app" ] || fail "The download doesn't contain Sony Import.app"
+    download "$tmp/app.zip" "shotloft-macos-$arch.zip" "sony-import-macos-$arch.zip"
+    ditto -x -k "$tmp/app.zip" "$tmp/unpacked" || fail "Could not unpack the download"
+    src="$(find "$tmp/unpacked" -maxdepth 1 -name '*.app' | head -1)"
+    [ -n "$src" ] || fail "The download doesn't contain the ShotLoft app"
+    name="$(basename "$src")"
 
-    if [ -n "${SONY_IMPORT_APPS_DIR:-}" ]; then
-      apps="$SONY_IMPORT_APPS_DIR"          # explicit choice: create it if needed
+    if [ -n "${SHOTLOFT_APPS_DIR:-}" ]; then
+      apps="$SHOTLOFT_APPS_DIR"          # explicit choice: create it if needed
     elif [ -w /Applications ]; then
       apps="/Applications"
     else
-      apps="$HOME/Applications"             # no admin rights: per-user Applications folder
+      apps="$HOME/Applications"          # no admin rights: per-user Applications folder
     fi
     mkdir -p "$apps" || fail "Could not create $apps"
-    app="$apps/Sony Import.app"
-    if pgrep -f "Sony Import.app/Contents/MacOS/Sony Import" >/dev/null 2>&1; then
-      fail "Sony Import is open. Quit it, then run this line again."
+    app="$apps/$name"
+    if pgrep -f "ShotLoft.app/Contents/MacOS/" >/dev/null 2>&1 || pgrep -f "Sony Import.app/Contents/" >/dev/null 2>&1; then
+      fail "ShotLoft is open. Quit it, then run this line again."
     fi
     step "Installing to $app ..."
-    rm -rf "$app"                            # also replaces the older Terminal-based version
-    ditto "$tmp/Sony Import.app" "$app" || fail "Could not install to $apps"
+    rm -rf "$app"
+    ditto "$src" "$app" || fail "Could not install to $apps"
     xattr -cr "$app" 2>/dev/null || true   # make sure nothing carries the "from the internet" mark
     touch "$app"                           # refresh the Finder / Launchpad icon
-    version="$("$app/Contents/MacOS/Sony Import" --version 2>/dev/null | awk '{print $2}')" || version=""
+    exe="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist" 2>/dev/null)"
+    version="$("$app/Contents/MacOS/$exe" --version 2>/dev/null | awk '{print $2}')" || version=""
 
-    printf '\n  %s✓ Sony Import %s is installed.%s\n\n' "$GREEN" "${version}" "$OFF"
-    say "Open it from your Applications folder or Launchpad: ${TEAL}Sony Import${OFF}"
+    if [ "$name" = "ShotLoft.app" ]; then      # remove the old Sony Import app, only if it's ours
+      # A normal install looks in both Applications folders. With an explicit folder (tests, CI),
+      # only that folder is touched.
+      olds=("$apps/Sony Import.app")
+      [ -z "${SHOTLOFT_APPS_DIR:-}" ] && olds+=("/Applications/Sony Import.app" "$HOME/Applications/Sony Import.app")
+      for old in "${olds[@]}"; do
+        [ -d "$old" ] || continue
+        id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$old/Contents/Info.plist" 2>/dev/null)"
+        if [ "$id" = "$OLD_BUNDLE_ID" ]; then
+          rm -rf "$old" && say "${DIM}Removed the old version (Sony Import): $old${OFF}"
+        fi
+      done
+    fi
+
+    printf '\n  %s✓ ShotLoft %s is installed.%s\n\n' "$GREEN" "${version}" "$OFF"
+    say "Open it from your Applications folder or Launchpad: ${TEAL}ShotLoft${OFF}"
     say "${DIM}To update later, run the same command again.${OFF}"
     echo
-    if [ -z "${SONY_IMPORT_NO_REVEAL:-}" ]; then
+    if [ -z "${SHOTLOFT_NO_REVEAL:-}" ]; then
       open -R "$app" 2>/dev/null || true   # show it in Finder
     fi
     ;;
@@ -76,30 +101,38 @@ case "$(uname -s)" in
   Linux)
     [ "$(uname -m)" = "x86_64" ] || fail "Only 64-bit Intel/AMD Linux is supported for now."
     step "Downloading the latest version for Linux..."
-    download "$RELEASES/sony-import-linux.zip" "$tmp/app.zip"
-    unzip -q "$tmp/app.zip" -d "$tmp" || fail "Could not unpack the download"
-    bin="${SONY_IMPORT_BIN_DIR:-$HOME/.local/bin}"
+    download "$tmp/app.zip" "shotloft-linux.zip" "sony-import-linux.zip"
+    unzip -q "$tmp/app.zip" -d "$tmp/unpacked" || fail "Could not unpack the download"
+    src="$tmp/unpacked/shotloft"; [ -f "$src" ] || src="$tmp/unpacked/sony-import"
+    [ -f "$src" ] || fail "The download doesn't contain the ShotLoft app"
+    bin="${SHOTLOFT_BIN_DIR:-$HOME/.local/bin}"
     mkdir -p "$bin"
-    install -m 755 "$tmp/sony-import" "$bin/sony-import"
-    version="$("$bin/sony-import" --version 2>/dev/null | awk '{print $2}')" || version=""
+    install -m 755 "$src" "$bin/shotloft"
+    version="$("$bin/shotloft" --version 2>/dev/null | awk '{print $2}')" || version=""
 
     apps_dir="${XDG_DATA_HOME:-$HOME/.local/share}"
     mkdir -p "$apps_dir/applications" "$apps_dir/icons"
-    curl -fsSL "$RAW/docs/icon.png" -o "$apps_dir/icons/sony-import.png" 2>/dev/null || true  # icon is optional
+    curl -fsSL "$RAW/docs/icon.png" -o "$apps_dir/icons/shotloft.png" 2>/dev/null || true  # icon is optional
     # The app opens in your browser on Linux; no terminal window needed.
-    cat > "$apps_dir/applications/sony-import.desktop" <<DESKTOP
+    cat > "$apps_dir/applications/shotloft.desktop" <<DESKTOP
 [Desktop Entry]
 Type=Application
-Name=Sony Import
+Name=ShotLoft
 Comment=Back up your Sony camera card, sorted by date
-Exec=$bin/sony-import
-Icon=$apps_dir/icons/sony-import.png
+Exec=$bin/shotloft
+Icon=$apps_dir/icons/shotloft.png
 Terminal=false
 Categories=Graphics;Photography;
 DESKTOP
 
-    printf '\n  %s✓ Sony Import %s is installed.%s\n\n' "$GREEN" "${version}" "$OFF"
-    say "Open ${TEAL}Sony Import${OFF} from your app menu. It opens in your web browser."
+    old_desktop="$apps_dir/applications/sony-import.desktop"   # the old Sony Import entry, if ours
+    if [ -f "$old_desktop" ] && grep -q "^Name=Sony Import" "$old_desktop"; then
+      rm -f "$old_desktop" "$apps_dir/icons/sony-import.png" "$bin/sony-import"
+      say "${DIM}Removed the old version (Sony Import).${OFF}"
+    fi
+
+    printf '\n  %s✓ ShotLoft %s is installed.%s\n\n' "$GREEN" "${version}" "$OFF"
+    say "Open ${TEAL}ShotLoft${OFF} from your app menu. It opens in your web browser."
     say "${DIM}To update later, run the same command again.${OFF}"
     echo
     ;;
