@@ -24,9 +24,13 @@ import time
 import urllib.parse
 import webbrowser
 
-# The engine (engine.py) is loaded at run time, so the app bundler can't see what it imports.
-# Importing those modules here makes sure they are packed into the built app.
-import argparse, ctypes, datetime, getpass, hashlib, re, string, struct, urllib.request  # noqa: E401,F401
+# The engine (engine.py) and HDR merge (hdr.py) are loaded at run time, so the app bundler can't
+# see what they import. Importing those modules here makes sure they are packed into the built app.
+import argparse, base64, ctypes, datetime, getpass, hashlib, io, re, string, struct, urllib.request, zlib  # noqa: E401,F401
+try:
+    import numpy, rawpy, PIL.Image, PIL.ImageFilter, PIL.TiffImagePlugin  # noqa: E401,F401
+except ImportError:
+    pass  # running from source without them: HDR merge says what to install
 
 HERE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 for _name in ("stdout", "stderr"):  # windowed builds have no console
@@ -42,6 +46,14 @@ def _load_engine():
 
 
 E = _load_engine()
+HDR, HDR_MISSING = None, None
+try:
+    _spec = importlib.util.spec_from_file_location("shotloft_hdr", os.path.join(HERE, "hdr.py"))
+    HDR = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(HDR)
+    import rawpy, PIL.Image  # noqa: E401,F401
+except ImportError as _e:
+    HDR, HDR_MISSING = None, f"HDR merge needs NumPy, rawpy and Pillow ({_e.name} is missing): pip install numpy rawpy pillow"
 TOKEN = secrets.token_urlsafe(24)
 WINDOW = None  # the pywebview window, when there is one
 
@@ -53,6 +65,8 @@ class App:
         self.lock = threading.Lock()
         self.dest = E.load_config().get("dest")
         self.job = None          # {"kind", "state": running|done|error, "progress", "result", "error"}
+        self.hdr_job = None      # the same, for HDR merges, which run alongside the backup
+        self.thumbs = {}         # path -> (mtime, data URI)
         self.plan = None         # last build_plan() result, used by "import"
         self.report = None       # last run_import() result, used by "trash"
         self.last_seen = time.time()
@@ -89,6 +103,26 @@ class App:
 
         threading.Thread(target=run, daemon=True).start()
         return {"started": kind}
+
+
+    def start_hdr(self, fn):
+        with self.lock:
+            if self.hdr_job and self.hdr_job["state"] == "running":
+                raise RuntimeError("An HDR merge is already running.")
+            self.hdr_job = {"kind": "hdr", "state": "running", "progress": None, "result": None, "error": None,
+                            "id": time.time()}
+        job = self.hdr_job
+
+        def run():
+            try:
+                job["result"] = fn(job)
+                job["state"] = "done"
+            except Exception as e:
+                job["error"] = str(e)
+                job["state"] = "error"
+
+        threading.Thread(target=run, daemon=True).start()
+        return {"started": "hdr"}
 
 
 APP = App()
@@ -177,7 +211,7 @@ def api_state(_):
         "dest": APP.dest, "dest_drive": info["dest_drive"],
         "dest_drive_connected": info["dest_drive_connected"], "dest_exists": info["dest_exists"],
         "free_bytes": E.free_bytes(APP.dest) if APP.dest and info["dest_drive_connected"] else None,
-        "job": APP.job, "update": {"latest": newer, "line": E.INSTALL_LINE_WIN if E.IS_WIN else E.INSTALL_LINE}
+        "job": APP.job, "hdr_job": APP.hdr_job, "hdr_missing": HDR_MISSING, "update": {"latest": newer, "line": E.INSTALL_LINE_WIN if E.IS_WIN else E.INSTALL_LINE}
                                   if newer else None,
         "can_pick": True,
     }
@@ -267,6 +301,115 @@ def api_trash(_):
     return {"moved": len(moved)}
 
 
+# ---------------------------------------------------------------- HDR
+
+def _hdr_day(body):
+    """The absolute day folder for a day the page picked, which must be one of the backup's days."""
+    if not APP.dest:
+        raise RuntimeError("Choose a backup folder first.")
+    days = dict(E.day_folders(APP.dest))
+    rel = body.get("day")
+    if rel not in days:
+        raise RuntimeError("That day isn't in the backup folder.")
+    return days[rel]
+
+
+def thumbnail(path, size=240):
+    """Small JPEG data URI: the RAW's embedded preview, or the merged JPEG itself."""
+    mtime = os.path.getmtime(path)
+    hit = APP.thumbs.get(path)
+    if hit and hit[0] == mtime:
+        return hit[1]
+    from PIL import Image
+    if path.upper().endswith(".ARW"):
+        with rawpy.imread(path) as r:
+            th = r.extract_thumb()
+        data = th.data if th.format == rawpy.ThumbFormat.JPEG else None
+        if data is None:
+            return None
+        im = Image.open(io.BytesIO(data))
+    else:
+        im = Image.open(path)
+    im.draft("RGB", (size, size))
+    im = im.convert("RGB")
+    im.thumbnail((size, size))
+    buf = io.BytesIO()
+    im.save(buf, "JPEG", quality=80)
+    uri = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+    APP.thumbs[path] = (mtime, uri)
+    return uri
+
+
+def api_hdr_days(_):
+    if not APP.dest:
+        return {"days": []}
+    days = []
+    for rel, path in E.day_folders(APP.dest):
+        try:
+            if any(f.upper().endswith(".ARW") for f in os.listdir(path)):
+                days.append({"day": rel, "label": day_label(rel)})
+        except OSError:
+            pass
+    return {"days": days}
+
+
+def api_hdr_scan(body):
+    folder = _hdr_day(body)
+    sets = E.find_brackets(folder)
+    out = []
+    for i, st in enumerate(sets):
+        mid = min(range(len(st["files"])), key=lambda k: abs(st["biases"][k]))
+        try:
+            thumb = thumbnail(st["output"] if st["done"] else st["files"][mid]) if HDR else None
+        except Exception:
+            thumb = None
+        out.append({"id": i, "names": st["names"], "biases": st["biases"], "time": st["taken"][11:16],
+                    "output": os.path.basename(st["output"]), "done": st["done"], "thumb": thumb})
+    return {"day": body.get("day"), "sets": out}
+
+
+def api_hdr_merge(body):
+    if HDR is None:
+        raise RuntimeError(HDR_MISSING)
+    folder = _hdr_day(body)
+    sets = E.find_brackets(folder)
+    ids = body.get("ids") or []
+    chosen = [sets[i] for i in ids if isinstance(i, int) and 0 <= i < len(sets)]
+    if not chosen:
+        raise RuntimeError("Choose at least one set to merge.")
+    tiff = bool(body.get("tiff"))
+
+    def run(job):
+        done, failed = [], []
+        for n, st in enumerate(chosen):
+            name = os.path.basename(st["output"])
+
+            def prog(frac, stage, n=n, name=name):
+                job["progress"] = {"done": n + frac, "total": len(chosen), "name": name, "stage": stage}
+            prog(0, "Reading")
+            try:
+                HDR.merge_set(st["files"], st["output"], tiff=tiff, progress=prog)
+                done.append(name)
+            except Exception as e:
+                failed.append({"file": name, "error": str(e)})
+        return {"merged": done, "failed": failed, "folder": os.path.join(folder, E.HDR_DIR), "day": body.get("day")}
+    return APP.start_hdr(run)
+
+
+def api_reveal(body):
+    """Open the day's HDR folder in Finder / File Explorer / the file manager."""
+    path = os.path.join(_hdr_day(body), E.HDR_DIR)
+    if not os.path.isdir(path):
+        raise RuntimeError("There's no HDR folder for that day yet.")
+    if E.IS_MAC:
+        subprocess.Popen(["open", path])
+    elif E.IS_WIN:
+        os.startfile(path)
+    else:
+        subprocess.Popen(["xdg-open", path])
+    return {"opened": path}
+
+
 def api_reset(_):
     with APP.lock:
         if APP.job and APP.job["state"] == "running":
@@ -277,7 +420,8 @@ def api_reset(_):
 
 ROUTES = {"/api/state": api_state, "/api/dest": api_set_dest, "/api/pick": api_pick, "/api/plan": api_plan,
           "/api/import": api_import, "/api/verify": api_verify, "/api/eject": api_eject,
-          "/api/trash": api_trash, "/api/reset": api_reset}
+          "/api/trash": api_trash, "/api/reset": api_reset, "/api/hdr/days": api_hdr_days,
+          "/api/hdr/scan": api_hdr_scan, "/api/hdr/merge": api_hdr_merge, "/api/reveal": api_reveal}
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -347,6 +491,14 @@ def main():
     if "--version" in sys.argv:
         print(f"shotloft {E.__version__}")
         return 0
+    if "--hdr-selftest" in sys.argv:  # checks that the built app can merge (tests; result also to a file)
+        problems = [HDR_MISSING] if HDR is None else HDR.selftest()[0]
+        out = "\n".join(problems) or "PASS"
+        print(out, flush=True)
+        if os.environ.get("SHOTLOFT_URL_FILE"):  # windowed builds have no console to print to
+            with open(os.environ["SHOTLOFT_URL_FILE"], "w") as f:
+                f.write(out)
+        return 1 if problems else 0
     server = Server(("127.0.0.1", 0), Handler)
     url = f"http://127.0.0.1:{server.server_address[1]}/?t={TOKEN}"
     threading.Thread(target=server.serve_forever, daemon=True).start()

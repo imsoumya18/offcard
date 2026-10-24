@@ -5,6 +5,15 @@ when a new version is out.
 
 ShotLoft was called **Sony Import** up to v2.0.0.
 
+## [Unreleased]
+
+- **HDR merge.** Shot an exposure bracket (BRK C)? ShotLoft finds the sets in your backup by
+  itself and merges each one into a single, natural-looking photo, with detail in both the
+  brightest and darkest parts. It lines up handheld shots, leaves out anything that moved, and
+  uses the cleanest parts of every shot, so shadows have much less noise. The result goes into an
+  `HDR` folder inside the day, with an optional 16-bit TIFF for editing. Your originals are never
+  changed.
+
 ## [2.1.1] - 2026-10-24
 
 - **A new app icon:** a camera aperture in ShotLoft's teal and orange.

@@ -15,6 +15,7 @@ Internal commands (--json for machine output; --dest can come from SHOTLOFT_DEST
   eject   [--card PATH..]             safely eject cards
   check-update                        is a newer release out?
   trash-jpgs --report FILE            move JPGs that have an ARW twin to the Trash
+  brackets --day DIR                  exposure-bracketed sets in a day folder (for HDR merge)
 """
 import argparse
 import getpass
@@ -127,8 +128,15 @@ def nice_secs(sec):
 
 # ---------------------------------------------------------------- metadata
 
-def _tiff_datetime(f, base):
-    """Return 'YYYY:MM:DD HH:MM:SS[.sub]' from a TIFF/EXIF block starting at base."""
+EXIF_TAGS = {  # tag -> name, for the fields ShotLoft reads (IFD0 and the Exif IFD)
+    0x0110: "model", 0x0112: "orientation", 0x0132: "datetime",
+    0x829A: "exposure_time", 0x829D: "fnumber", 0x8827: "iso", 0x9003: "taken",
+    0x9204: "bias", 0x920A: "focal_length", 0x9291: "subsec",
+}
+
+
+def _tiff_fields(f, base):
+    """Read the EXIF_TAGS fields from a TIFF/EXIF block starting at base, as {name: value}."""
     f.seek(base)
     head = f.read(8)
     if head[:2] == b"II":
@@ -136,7 +144,7 @@ def _tiff_datetime(f, base):
     elif head[:2] == b"MM":
         e = ">"
     else:
-        return None
+        return {}
 
     def read_ifd(off):
         f.seek(base + off)
@@ -147,30 +155,45 @@ def _tiff_datetime(f, base):
             tags[tag] = (typ, cnt, val)
         return tags
 
-    def ascii_val(entry):
+    def value(entry):
         typ, cnt, val = entry
-        if cnt <= 4:
-            raw = val[:cnt]
+        size = {2: 1, 3: 2, 4: 4, 5: 8, 10: 8}.get(typ)
+        if not size or not cnt:
+            return None
+        if size * cnt <= 4:
+            raw = val[:size * cnt]
         else:
             pos = f.tell()
             f.seek(base + struct.unpack(e + "I", val)[0])
-            raw = f.read(cnt)
+            raw = f.read(size * cnt)
             f.seek(pos)
-        return raw.split(b"\0")[0].decode("ascii", "ignore").strip()
+        if typ == 2:
+            return raw.split(b"\0")[0].decode("ascii", "ignore").strip()
+        if typ in (3, 4):
+            return struct.unpack(e + ("H" if typ == 3 else "I"), raw[:size])[0]
+        num, den = struct.unpack(e + ("II" if typ == 5 else "ii"), raw[:8])
+        return num / den if den else None
 
+    out = {}
     ifd0 = read_ifd(struct.unpack(e + "I", head[4:8])[0])
-    dt = sub = None
+    tags = dict(ifd0)
     if 0x8769 in ifd0:
-        exif = read_ifd(struct.unpack(e + "I", ifd0[0x8769][2])[0])
-        if 0x9003 in exif:
-            dt = ascii_val(exif[0x9003])
-        if 0x9291 in exif:
-            sub = ascii_val(exif[0x9291])
-    if not dt and 0x0132 in ifd0:
-        dt = ascii_val(ifd0[0x0132])
+        tags.update(read_ifd(struct.unpack(e + "I", ifd0[0x8769][2])[0]))
+    for tag, name in EXIF_TAGS.items():
+        if tag in tags:
+            v = value(tags[tag])
+            if v not in (None, ""):
+                out[name] = v
+    return out
+
+
+def _tiff_datetime(f, base):
+    """Return 'YYYY:MM:DD HH:MM:SS[.sub]' from a TIFF/EXIF block starting at base."""
+    fields = _tiff_fields(f, base)
+    dt = fields.get("taken") or fields.get("datetime")
     if not dt:
         return None
-    return dt + ("." + sub if sub else "")
+    return dt + ("." + str(fields["subsec"]) if "subsec" in fields else "")
 
 
 def _jpeg_datetime(f):
@@ -230,6 +253,91 @@ def video_datetime(mp4, xml):
         except Exception:
             pass
     return _mtime_datetime(mp4)
+
+
+# ---------------------------------------------------------------- bracketed shots (HDR)
+
+HDR_DIR = "HDR"      # merged HDR photos go here, inside the day folder; never part of the backup index
+BRACKET_GAP = 2.0    # most seconds between two frames of one bracket set
+BRACKET_SPAN = 1.0   # least EV between a set's darkest and brightest frame
+
+
+def hdr_name(names):
+    """'DSC01234-01236_HDR.jpg' for a set shot as DSC01234..DSC01236."""
+    stems = sorted(os.path.splitext(n)[0] for n in names)
+    m1, m2 = re.match(r"^(\D*)(\d+)$", stems[0]), re.match(r"^(\D*)(\d+)$", stems[-1])
+    base = f"{stems[0]}-{m2.group(2)}" if m1 and m2 and m1.group(1) == m2.group(1) else stems[0]
+    return base + "_HDR.jpg"
+
+
+def find_brackets(folder):
+    """Exposure-bracketed sets among the RAW photos in a day folder, oldest first.
+
+    A set is consecutive shots, at most BRACKET_GAP seconds apart, from the same camera at the same
+    focal length, whose exposure compensation steps (for example 0, -2, +2): the camera writes each
+    frame's step into its EXIF. Bursts, and white-balance or DRO brackets, keep one exposure, so
+    they don't count. A step already in the set starts the next set."""
+    shots = []
+    for fn in sorted(os.listdir(folder)):
+        if fn.startswith(".") or not fn.upper().endswith(".ARW"):
+            continue
+        p = os.path.join(folder, fn)
+        try:
+            with open(p, "rb") as f:
+                x = _tiff_fields(f, 0)
+            when = datetime.strptime(x["taken"][:19], "%Y:%m:%d %H:%M:%S").timestamp()
+            when += float("0." + str(x["subsec"])) if str(x.get("subsec", "")).isdigit() else 0
+        except Exception:
+            continue
+        if "bias" in x and "exposure_time" in x:
+            shots.append({"when": when, "name": fn, "path": p, "exif": x})
+    shots.sort(key=lambda s: (s["when"], s["name"]))
+
+    sets, cur = [], []
+
+    def close():
+        biases = [s["exif"]["bias"] for s in cur]
+        if len(cur) >= 2 and max(biases) - min(biases) >= BRACKET_SPAN:
+            out = os.path.join(folder, HDR_DIR, hdr_name([s["name"] for s in cur]))
+            sets.append({"files": [s["path"] for s in cur], "names": [s["name"] for s in cur],
+                         "biases": [round(b, 1) for b in biases], "taken": cur[0]["exif"]["taken"],
+                         "output": out, "done": os.path.exists(out)})
+
+    for s in shots:
+        prev = cur[-1] if cur else None
+        if prev and (s["when"] - prev["when"] <= BRACKET_GAP
+                     and s["exif"].get("model") == prev["exif"].get("model")
+                     and s["exif"].get("focal_length") == prev["exif"].get("focal_length")
+                     and all(abs(s["exif"]["bias"] - c["exif"]["bias"]) > 0.05 for c in cur)):
+            cur.append(s)
+        else:
+            close()
+            cur = [s]
+    close()
+    return sets
+
+
+DAY_DIR = re.compile(r"^(\d{2})([A-Z][a-z]{2})(\d{2})$")  # 24Oct26
+
+
+def day_folders(dest):
+    """Day folders in the backup, newest first, as [(relative path, absolute path)]."""
+    days = []
+    if not os.path.isdir(dest):
+        return days
+    for y in os.listdir(dest):
+        if not re.match(r"^\d{4}$", y) or not os.path.isdir(os.path.join(dest, y)):
+            continue
+        for m in os.listdir(os.path.join(dest, y)):
+            mm = re.match(r"^(\d{1,2})\. ", m)
+            if not mm or not os.path.isdir(os.path.join(dest, y, m)):
+                continue
+            for d in os.listdir(os.path.join(dest, y, m)):
+                dd = DAY_DIR.match(d)
+                if dd and os.path.isdir(os.path.join(dest, y, m, d)):
+                    days.append(((int(y), int(mm.group(1)), int(dd.group(1))), os.path.join(y, m, d)))
+    days.sort(reverse=True)
+    return [(rel, os.path.join(dest, rel)) for _, rel in days]
 
 
 def fingerprint(path):
@@ -389,7 +497,7 @@ class DestIndex:
         if not os.path.isdir(dest):
             return
         for dirpath, dirnames, filenames in os.walk(dest):
-            dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+            dirnames[:] = [d for d in dirnames if not d.startswith(".") and d != HDR_DIR]  # HDRs are made, not backed up
             for fn in filenames:
                 if fn.startswith("."):
                     continue
@@ -1089,6 +1197,9 @@ def main():
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("trash-jpgs", help="move JPGs that have an ARW twin to the Trash")
     p.add_argument("--report", required=True)
+    p = sub.add_parser("brackets", help="exposure-bracketed sets in a day folder")
+    p.add_argument("--day", required=True)
+    p.add_argument("--json", action="store_true")
     args = ap.parse_args()
 
     if args.cmd is None:
@@ -1127,6 +1238,16 @@ def main():
             rep = json.load(f)
         moved = trash([p["jpg"] for p in rep["raw_jpg_pairs"]])
         print(f"Moved {len(moved)} JPGs to the Trash.")
+        return 0
+    if args.cmd == "brackets":
+        sets = find_brackets(args.day)
+        if args.json:
+            print(json.dumps(sets, indent=2))
+        else:
+            for s in sets:
+                print(f"{s['taken'][11:19]}  {', '.join(s['names'])}  EV {s['biases']}"
+                      f"  -> {os.path.basename(s['output'])}{'  (merged)' if s['done'] else ''}")
+            print(f"{len(sets)} bracket set{'' if len(sets) == 1 else 's'}")
         return 0
 
     if not args.dest:

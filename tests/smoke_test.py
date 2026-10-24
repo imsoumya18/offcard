@@ -26,6 +26,39 @@ def tiff_with_date(dt, pad):
     return t + date + os.urandom(pad)
 
 
+def tiff_with_exposure(dt, exposure, bias, pad, model="ILCE-6600", focal=16.0):
+    """Minimal little-endian TIFF like a Sony RAW: IFD0 (Model) -> Exif IFD (DateTimeOriginal,
+    ExposureTime, ExposureBiasValue, FocalLength), then random padding."""
+    model_b = model.encode() + b"\0"
+    date = dt.encode() + b"\0"
+    ifd0 = 8
+    exif_ifd = ifd0 + 2 + 2 * 12 + 4
+    data = exif_ifd + 2 + 4 * 12 + 4
+    blobs = [model_b, date, struct.pack("<II", *exposure), struct.pack("<ii", round(bias * 10), 10),
+             struct.pack("<II", round(focal * 10), 10)]
+    offs, o = [], data
+    for b in blobs:
+        offs.append(o)
+        o += len(b)
+    t = b"II*\0" + struct.pack("<I", ifd0)
+    t += struct.pack("<H", 2) + struct.pack("<HHII", 0x0110, 2, len(model_b), offs[0]) \
+        + struct.pack("<HHII", 0x8769, 4, 1, exif_ifd) + struct.pack("<I", 0)
+    t += struct.pack("<H", 4) + struct.pack("<HHII", 0x829A, 5, 1, offs[2]) \
+        + struct.pack("<HHII", 0x9003, 2, len(date), offs[1]) + struct.pack("<HHII", 0x9204, 10, 1, offs[3]) \
+        + struct.pack("<HHII", 0x920A, 5, 1, offs[4]) + struct.pack("<I", 0)
+    return t + b"".join(blobs) + os.urandom(pad)
+
+
+def make_bracket_day(folder):
+    """Two exposure-bracketed sets with an ordinary burst between them (which isn't one)."""
+    shots = [("10:00:00", (1, 100), 0), ("10:00:00", (1, 400), -2), ("10:00:01", (1, 25), 2),   # set 1
+             ("10:00:06", (1, 100), 0), ("10:00:06", (1, 100), 0), ("10:00:07", (1, 100), 0),   # burst
+             ("10:00:12", (1, 800), -3), ("10:00:12", (1, 100), 0), ("10:00:13", (1, 13), 3)]   # set 2
+    for i, (hms, exp, bias) in enumerate(shots):
+        write(os.path.join(folder, f"DSC{100 + i:05d}.ARW"),
+              tiff_with_exposure(f"2026:03:01 {hms}", exp, bias, 20_000))
+
+
 def jpeg_with_date(dt, pad):
     exif = b"Exif\0\0" + tiff_with_date(dt, 0)
     return b"\xff\xd8" + b"\xff\xe1" + struct.pack(">H", len(exif) + 2) + exif + b"\xff\xd9" + os.urandom(pad)
@@ -174,6 +207,28 @@ def main():
             sys.exit("FAIL: a JPG that was removed on purpose would be copied again")
         if verify(tool, dest, card, 0)[:4] != (True, 0, 0, 1):
             sys.exit("FAIL: a JPG removed on purpose should not make the card unsafe")
+
+        # HDR merges live in the day's HDR folder and are never taken for backed-up files.
+        hdr_dir = os.path.join(feb, "HDR")
+        os.makedirs(hdr_dir)
+        os.rename(os.path.join(feb, "DSC00002.ARW"), os.path.join(hdr_dir, "DSC00002.ARW"))
+        if verify(tool, dest, card, 1)[:3] != (False, 1, 0):
+            sys.exit("FAIL: a file inside an HDR folder counted as backed up")
+        os.rename(os.path.join(hdr_dir, "DSC00002.ARW"), os.path.join(feb, "DSC00002.ARW"))
+        os.rmdir(hdr_dir)
+
+        # Bracket sets for HDR: two sets found, the burst between them isn't one.
+        day = os.path.join(tmp, "brackets", "01Mar26")
+        make_bracket_day(day)
+        sets = json.loads(run(tool + ["brackets", "--day", day, "--json"]))
+        got = [(s["names"], s["biases"], os.path.basename(s["output"]), s["done"]) for s in sets]
+        want = [(["DSC00100.ARW", "DSC00101.ARW", "DSC00102.ARW"], [0.0, -2.0, 2.0], "DSC00100-00102_HDR.jpg", False),
+                (["DSC00106.ARW", "DSC00107.ARW", "DSC00108.ARW"], [-3.0, 0.0, 3.0], "DSC00106-00108_HDR.jpg", False)]
+        if got != want:
+            sys.exit(f"FAIL: bracket sets: {got}")
+        write(os.path.join(day, "HDR", "DSC00100-00102_HDR.jpg"), b"x")
+        if [s["done"] for s in json.loads(run(tool + ["brackets", "--day", day, "--json"]))] != [True, False]:
+            sys.exit("FAIL: a merged set isn't shown as merged")
 
         # Eject refuses anything that isn't a mounted drive (here: the fake card folder).
         out = run(tool + ["eject", "--card", card], expect=1)

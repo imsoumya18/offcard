@@ -8,7 +8,8 @@
 [![License: MIT](https://img.shields.io/github/license/imsoumya18/shotloft?color=008787)](LICENSE)
 
 A simple app that backs up the photos and videos from your Sony camera's memory card, neatly
-sorted into **Year → Month → Day** folders. Open it any time: it only copies what's new.
+sorted into **Year → Month → Day** folders. Open it any time: it only copies what's new. Shot an
+exposure bracket? It merges it into one natural-looking **HDR** photo.
 
 <sub>ShotLoft was called *Sony Import* up to v2.0.0. Already using it? Run the install line below once to switch.</sub>
 
@@ -87,10 +88,26 @@ Camera Backup/                ← the folder you chose
         └── 05Sep26/
             ├── DSC00001.ARW
             ├── DSC00001.JPG
-            └── Videos/
-                ├── C00001.MP4
-                └── C00001M01.XML
+            ├── Videos/
+            │   ├── C00001.MP4
+            │   └── C00001M01.XML
+            └── HDR/                       ← only if you merge bracketed shots
+                └── DSC00012-00014_HDR.jpg
 ```
+
+### HDR: merge bracketed shots
+
+For a scene with very bright and very dark parts (a room with a window, a sunset), take a few
+shots at different exposures and let ShotLoft merge them into one photo where both look right.
+
+1. **On the camera:** set the drive mode to **Continuous Bracket** (BRK C), for example 3 shots at
+   2.0 or 3.0 EV, and shoot **RAW**. Hold the camera steady, or use a tripod.
+2. **In ShotLoft:** the **HDR** section under your backup lists every day that has photos. Pick a
+   day, and it finds the bracketed sets by itself, with a preview of each.
+3. Tick the sets you want and click **Merge to HDR**. Each takes about 30 seconds.
+4. The result goes into an `HDR` folder inside that day, named after the shots it came from. Your
+   original photos are never changed. Tick **Also save a 16-bit TIFF** if you want to edit the
+   result further in Lightroom or Photoshop.
 
 ## What it does
 
@@ -108,6 +125,13 @@ Camera Backup/                ← the folder you chose
 - Gives every file one clean number in shooting order (`DSC00001`…, `C00001`…), so names never clash.
 - Shot in RAW + JPG? It offers to move the extra JPGs to the Trash, where you can restore them.
 
+**Makes HDR photos**
+- Finds your bracketed shots by itself, and merges each set into one natural-looking photo:
+  detail in the bright window *and* the dark corner, with no "HDR look".
+- Lines up handheld shots, and leaves out anything that moved between them, so there are no ghosts.
+- Uses every shot's clean parts, so shadows have far less noise than any single shot.
+- Saves a full-size JPG, and a 16-bit TIFF for editing if you want one.
+
 **Stays easy**
 - One window: your card, your backup folder, what's new, and one button.
 - One line to install on Windows, Mac or Linux, with no security warnings.
@@ -120,6 +144,8 @@ Camera Backup/                ← the folder you chose
 - **Checking a full card takes about a minute** before copying starts. The byte-by-byte
   "safe to format" check takes about a minute for every 2 GB on the card, depending on your card
   reader.
+- **HDR merge** works with RAW (`.ARW`) brackets. It needs about 2.5 GB of free memory while it
+  merges. Highlights brighter than even your darkest shot could hold (like the sun) stay white.
 - **Privacy:** your photos never leave your computer. The app's window talks only to the app
   itself, on your computer. The only internet use is a quick check with GitHub for a newer version.
 - **Windows 10:** the app's window needs Microsoft's free WebView2 component. It's built into

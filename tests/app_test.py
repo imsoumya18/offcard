@@ -4,11 +4,13 @@
 Usage:  python tests/app_test.py <command to run the app...>
   e.g.  python tests/app_test.py python shotloft.py
         python tests/app_test.py "dist/ShotLoft.app/Contents/MacOS/ShotLoft"
+
+HDR merge needs NumPy, rawpy and Pillow wherever the app runs (the built app bundles them).
 """
 import http.client, json, os, subprocess, sys, tempfile, time, urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from smoke_test import make_card, EXPECTED, tree  # noqa: E402
+from smoke_test import make_card, make_bracket_day, EXPECTED, tree  # noqa: E402
 
 
 def main():
@@ -43,10 +45,10 @@ def main():
                 r = c.getresponse()
                 return r.status, (json.loads(r.read() or b"{}") if path.startswith("/api") else r.read())
 
-            def wait(kind):
+            def wait(kind, key="job"):
                 for _ in range(600):
                     st, s = call("/api/state")
-                    j = s["job"]
+                    j = s[key]
                     if j and j["kind"] == kind and j["state"] != "running":
                         if j["state"] == "error":
                             sys.exit(f"FAIL: {kind}: {j['error']}")
@@ -80,12 +82,35 @@ def main():
             call("/api/plan", {})
             again = wait("plan")
             assert again["new_files"] == 0 and again["already_photos"] == 5, again
+
+            # HDR: the day with bracket sets is listed and scanned; a merge of fake RAW files fails
+            # cleanly, set by set, and only days inside the backup folder are accepted.
+            make_bracket_day(os.path.join(dest, "2026", "3. March", "01Mar26"))
+            st, days = call("/api/hdr/days")
+            assert days["days"][0]["day"] == os.path.join("2026", "3. March", "01Mar26"), days
+            assert days["days"][0]["label"] == "1 Mar 2026", days
+            st, scan = call("/api/hdr/scan", {"day": days["days"][0]["day"]})
+            assert st == 200 and [len(x["names"]) for x in scan["sets"]] == [3, 3], scan
+            assert call("/api/hdr/scan", {"day": "../../etc"})[0] == 400, "day outside the backup"
+            st, s = call("/api/state")
+            assert s["hdr_missing"] is None, s["hdr_missing"]
+            st, r = call("/api/hdr/merge", {"day": days["days"][0]["day"], "ids": [0], "tiff": False})
+            assert st == 200, r
+            res = wait("hdr", key="hdr_job")
+            assert res["merged"] == [] and len(res["failed"]) == 1, res
         finally:
             proc.terminate()
             try:
                 proc.wait(10)
             except subprocess.TimeoutExpired:
                 proc.kill()
+
+        # The HDR merge itself, on synthetic frames, inside this very app (bundled libraries too).
+        os.remove(urlfile)
+        r = subprocess.run(tool + ["--hdr-selftest"], env=env, capture_output=True, text=True, timeout=600)
+        out = open(urlfile).read() if os.path.exists(urlfile) else r.stdout
+        if r.returncode != 0 or out.strip() != "PASS":
+            sys.exit(f"FAIL: HDR self-test: {out.strip() or r.stderr[-2000:]}")
     print("PASS")
 
 

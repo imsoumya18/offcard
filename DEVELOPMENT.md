@@ -3,18 +3,20 @@
 [![Build](https://img.shields.io/github/actions/workflow/status/imsoumya18/shotloft/build.yml?branch=main&label=build)](https://github.com/imsoumya18/shotloft/actions/workflows/build.yml)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-008787)](https://www.python.org/)
 
-ShotLoft is a desktop app made of three parts. User-facing docs are in the [README](README.md).
+ShotLoft is a desktop app made of four parts. User-facing docs are in the [README](README.md).
 
 | Part | What it is |
 |---|---|
 | [`shotloft.py`](shotloft.py) | The app: opens the window and serves the page and its actions |
 | [`ui/index.html`](ui/index.html) | The window's contents: one page of HTML, CSS and JavaScript |
-| [`engine.py`](engine.py) | The engine: card detection, matching, copying, repairs, verify, eject. Standard library only, Python 3.8+ |
+| [`engine.py`](engine.py) | The engine: card detection, matching, copying, repairs, verify, eject, finding bracket sets. Standard library only, Python 3.8+ |
+| [`hdr.py`](hdr.py) | HDR merge of one bracket set. Needs NumPy, rawpy (LibRaw) and Pillow, which the built app bundles |
 
 ## Run from source
 
 ```bash
 pip install pywebview                 # once, for the native window (Mac and Windows)
+pip install numpy rawpy pillow        # once, for HDR merge (the app says so if they're missing)
 python3 shotloft.py            # open the app
 python3 shotloft.py --browser  # open it in the browser instead
 python3 shotloft.py --serve    # no window; print the URL and token (tests)
@@ -24,19 +26,22 @@ python3 shotloft.py --serve    # no window; print the URL and token (tests)
 
 - **Local server.** A small HTTP server on `127.0.0.1` (random port) serves the page and a JSON API
   (`/api/state`, `/api/dest`, `/api/pick`, `/api/plan`, `/api/import`, `/api/verify`,
-  `/api/eject`, `/api/trash`, `/api/reset`).
+  `/api/eject`, `/api/trash`, `/api/reset`, and for HDR `/api/hdr/days`, `/api/hdr/scan`,
+  `/api/hdr/merge`, `/api/reveal`).
   - Every request needs a secret token created at launch, and a `127.0.0.1` Host header, so other
     web pages and other machines can't drive it.
   - Long jobs run in a background thread. The engine reports progress to the page through
-    `PROGRESS_HOOK`.
+    `PROGRESS_HOOK`. HDR merges have their own job slot, so they can run while a card backs up.
+  - HDR days and scans only accept day folders that are inside the chosen backup folder.
 - **Window.** On macOS and Windows the page opens in a native window
   ([pywebview](https://pywebview.flowrl.com/), using the system web view: WebKit on Mac, Edge
   WebView2 on Windows). On Linux, or if that window can't start, it opens in the default browser
   and quits about 45 seconds after the page is closed.
 - **Folder picker.** A native dialog everywhere: pywebview's in the window, otherwise AppleScript,
   PowerShell, `zenity` or `kdialog`. You can also paste a path.
-- **Engine loading.** The app loads `engine.py` at start-up. Because of that, the app imports
-  the engine's standard-library modules itself, so PyInstaller packs them into the built app.
+- **Engine loading.** The app loads `engine.py` and `hdr.py` at start-up. Because of that, the app
+  imports their modules itself (the engine's standard-library ones, NumPy, rawpy and Pillow), so
+  PyInstaller packs them into the built app.
 - **macOS builds** add `NSAppTransportSecurity → NSAllowsLocalNetworking` to `Info.plist` and are
   re-signed ad hoc. Without it, the window can't load the app's own `http://127.0.0.1` page; the
   setting allows local addresses only.
@@ -111,6 +116,8 @@ python3 engine.py verify --dest "$DEST" --json           # byte-for-byte check
 python3 engine.py eject  [--card PATH]                   # safely eject the card(s)
 python3 engine.py check-update --json                    # is a newer release out?
 python3 engine.py trash-jpgs --report r.json             # move extra JPGs to the Trash
+python3 engine.py brackets --day "$DEST/2026/10. October/24Oct26" --json   # bracket sets
+python3 hdr.py merge OUT_DIR A.ARW B.ARW C.ARW [--tiff]  # merge one set (needs the HDR libraries)
 ```
 
 - **Cards:** `--card PATH` (repeatable) picks specific cards. Otherwise every connected Sony card
@@ -124,6 +131,36 @@ python3 engine.py trash-jpgs --report r.json             # move extra JPGs to th
   | `1` | Some files failed (for `verify`: not safe to format) |
   | `2` | Bad arguments, or no card |
   | `3` | Not enough space on the backup drive (nothing copied) |
+
+## How HDR merge works
+
+**Finding sets** (`engine.find_brackets`, standard library). Sony writes each bracket frame's
+exposure step into its EXIF (`ExposureBiasValue`), even in M mode. A set is consecutive RAW shots
+at most 2 s apart, from the same camera at the same focal length, whose steps differ and span at
+least 1 EV. A step already in the set starts the next set. Bursts and white-balance or DRO
+brackets keep one exposure, so they never count. The result goes to
+`<day>/HDR/DSC00012-00014_HDR.jpg`, and the backup index skips `HDR` folders, so merges are never
+taken for backed-up files.
+
+**Merging** (`hdr.py`). Every choice below was tested on real a6600 brackets (handheld, ISO 250 and
+2500, ±2 and ±3 EV, a window brighter than the darkest frame, a curtain moving in the wind):
+
+| Step | What it does | Why |
+|---|---|---|
+| Decode | LibRaw's AHD demosaic to linear camera RGB, full size; analysis on a 2×2-binned half-size copy | Linear data is what makes the merge simple maths |
+| Clipping | A colour counts as clipped within 2.5% of white | Sony's lossy RAW smears the clip level by about ±100 |
+| Noise | Fits variance = a·signal + b per frame, from the two green pixels of each Bayer block | They see the same light, so their difference is pure noise |
+| Align | Phase correlation of 256 px tiles on exposure-equalised log luminance, then a robust affine fit (shift, rotation, scale) | Handheld frames moved up to ~9 px and 0.15°; a tile-by-tile local field was tried and didn't help |
+| Exposure ratio | Measured from the pixels, on pixels chosen by the reference only | EXIF shutter speeds are rounded ("1/13" is really 1/12.5); choosing pixels by the noisy frame biases the ratio |
+| Merge | Weights 1/variance, per pixel, fading out near a frame's clipped areas; per colour only where every frame is clipped somewhere | The statistically best estimate; mixing sources per colour caused colour speckle |
+| Ghosts | A frame is left out where it differs from the reference by more than noise plus a 1.5 px misalignment at edges can explain. The reference is the middle exposure, or the next darker frame where it's clipped | Without the edge term, motion blur at edges was taken for movement and left noisy dots |
+| Highlights | Colours clipped in every frame are rebuilt toward white | Never magenta |
+| Tone | Mertens exposure fusion of virtual exposures of the merge, worked out at 1/4 size and applied as a smooth gain at full size, with saturation reduced as pixels are lifted (Mantiuk 2009) | Natural look without halos; the gain keeps full-size detail; lifted shadows don't turn garish |
+| Finish | Defringe (violet edges next to very bright areas take their surroundings' colour), then a light blur on colour only | Lens purple fringing at windows; colour noise in lifted shadows |
+
+About 30 s per 3-shot set of 24 MP on an Apple Silicon Mac, and about 2.5 GB of memory at peak
+(about half of it LibRaw's decoding buffers). The optional TIFF is the merge with only a gentle
+global roll-off, for editing.
 
 ## Tests
 
@@ -139,10 +176,18 @@ python3 engine.py trash-jpgs --report r.json             # move extra JPGs to th
     spot the quick fingerprint doesn't sample) and a missing backup file
   - a full backup drive stops the import before anything is copied
   - eject refuses a plain folder
+  - a file moved into an `HDR` folder doesn't count as backed up
+  - `brackets` finds two bracket sets (with a burst between them that isn't one), names their
+    output, and shows a set as merged once its file exists
   - the update check reports a newer release, ignores an older one, and stays quiet when offline
 - **[`tests/app_test.py`](tests/app_test.py)** tests the app the way its page uses it:
   - choose a folder, check what's new, back up, verify, try to eject, then check again
   - requests with no token, a wrong token, or a foreign Host header are refused
+  - HDR: a day with bracket sets is listed and scanned, days outside the backup are refused, and a
+    merge of fake RAW files fails cleanly
+  - `--hdr-selftest`: the merge itself, inside that app (so a built app's bundled libraries are
+    checked too), on synthetic frames: alignment, shadow noise, and a window recovered from the
+    dark frame (`python3 hdr.py selftest` runs the same test from source)
 
 ```bash
 python3 tests/smoke_test.py python3 engine.py      # the engine
@@ -219,7 +264,7 @@ On every push, [GitHub Actions](.github/workflows/build.yml) runs these jobs:
 | Job | What it does |
 |---|---|
 | `engine` | Engine tests from source, on Windows, macOS and Linux |
-| `app` | Builds the app with PyInstaller for Windows, macOS (Apple Silicon and Intel) and Linux, and runs the app test against each build |
+| `app` | Builds the app with PyInstaller for Windows, macOS (Apple Silicon and Intel) and Linux, and runs the app test against each build. The HDR libraries are pinned; Intel Macs get rawpy 0.25.1, its last release with Intel Mac wheels |
 | `installer`, `installer-windows` | Install the app built in the same run with the one-line installers, then run the app test against the installed copy |
 | `release` | Only for version tags, and only once all the others pass |
 
