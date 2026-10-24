@@ -119,6 +119,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: out
@@ -126,4 +127,12 @@ jobs:
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+        run: |
+          # Release notes come from this version's section of CHANGELOG.md.
+          if .github/scripts/release-notes.sh "$GITHUB_REF_NAME" > notes.md; then
+            NOTES=(--notes-file notes.md)
+          else
+            echo "::warning::CHANGELOG.md has no section for $GITHUB_REF_NAME; using GitHub's automatic notes"
+            NOTES=(--generate-notes)
+          fi
+          gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" --title "Sony Import ${GITHUB_REF_NAME#v}" "${NOTES[@]}"
