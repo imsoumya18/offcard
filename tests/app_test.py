@@ -2,8 +2,8 @@
 """End-to-end test of the desktop app's backend, the way its page uses it.
 
 Usage:  python tests/app_test.py <command to run the app...>
-  e.g.  python tests/app_test.py python sony-import-app.py
-        python tests/app_test.py "dist/Sony Import.app/Contents/MacOS/Sony Import"
+  e.g.  python tests/app_test.py python shotloft.py
+        python tests/app_test.py "dist/ShotLoft.app/Contents/MacOS/ShotLoft"
 """
 import http.client, json, os, subprocess, sys, tempfile, time, urllib.parse
 
@@ -20,8 +20,8 @@ def main():
         os.makedirs(home)
         make_card(card)
         urlfile = os.path.join(tmp, "url.json")
-        env = {**os.environ, "HOME": home, "USERPROFILE": home, "SONY_IMPORT_NO_UPDATE_CHECK": "1",
-               "SONY_IMPORT_TEST_CARDS": card, "SONY_IMPORT_URL_FILE": urlfile}
+        env = {**os.environ, "HOME": home, "USERPROFILE": home, "SHOTLOFT_NO_UPDATE_CHECK": "1",
+               "SHOTLOFT_TEST_CARDS": card, "SHOTLOFT_URL_FILE": urlfile}
         proc = subprocess.Popen(tool + ["--serve"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
             for _ in range(600):

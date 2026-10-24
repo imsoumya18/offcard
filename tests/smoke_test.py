@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """End-to-end test: build a fake Sony card, import it, check the result.
 
-Usage:  python tests/smoke_test.py <command to run sony-import...>
-  e.g.  python tests/smoke_test.py python sony-import.py
-        python tests/smoke_test.py ./dist/sony-import
+Usage:  python tests/smoke_test.py <command to run the engine...>
+  e.g.  python tests/smoke_test.py python engine.py
 """
 import json
 import os
@@ -116,7 +115,7 @@ def main():
         make_card(card)
 
         # Backup drive too full -> plan says so, import copies nothing and exits with code 3.
-        full = {"SONY_IMPORT_TEST_FREE_BYTES": "1000"}
+        full = {"SHOTLOFT_TEST_FREE_BYTES": "1000"}
         plan = json.loads(run(tool + ["plan", "--dest", dest, "--card", card, "--json"], env=full))
         if plan["enough_space"] or plan["needed_bytes"] <= 0:
             sys.exit(f"FAIL: a full drive was not detected: {plan}")
@@ -187,11 +186,11 @@ def main():
             with open(fake, "w") as f:
                 json.dump({"tag_name": tag}, f)
             out = json.loads(run(tool + ["check-update", "--json"],
-                                 env={"SONY_IMPORT_UPDATE_URL": pathlib.Path(fake).as_uri()}))
+                                 env={"SHOTLOFT_UPDATE_URL": pathlib.Path(fake).as_uri()}))
             if out["update_available"] != expected or out["latest"] != tag[1:]:
                 sys.exit(f"FAIL: update check with {tag}: {out}")
         missing = pathlib.Path(tmp, "nope.json").as_uri()
-        out = json.loads(run(tool + ["check-update", "--json"], env={"SONY_IMPORT_UPDATE_URL": missing}))
+        out = json.loads(run(tool + ["check-update", "--json"], env={"SHOTLOFT_UPDATE_URL": missing}))
         if out["latest"] is not None or out["update_available"]:
             sys.exit(f"FAIL: offline update check should be quiet: {out}")
     print("PASS")

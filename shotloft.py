@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Sony Import desktop app: a window on top of the sony-import.py engine.
+"""ShotLoft desktop app: a window on top of its engine (engine.py).
 
 The window is a web page (ui/index.html) served by a small HTTP server on 127.0.0.1 that only
 answers requests carrying a per-launch secret token. On macOS and Windows it opens in a native
 window (pywebview, using the system's web view). Elsewhere, or if that fails, it opens in the
 default browser and quits a little while after the page is closed.
 
-  python3 sony-import-app.py              open the app
-  python3 sony-import-app.py --browser    always use the browser
-  python3 sony-import-app.py --serve      no window or browser; print the URL (tests)
+  python3 shotloft.py              open the app
+  python3 shotloft.py --browser    always use the browser
+  python3 shotloft.py --serve      no window or browser; print the URL (tests)
 """
 import http.server
 import importlib.util
@@ -24,7 +24,7 @@ import time
 import urllib.parse
 import webbrowser
 
-# The engine (sony-import.py) is loaded at run time, so the app bundler can't see what it imports.
+# The engine (engine.py) is loaded at run time, so the app bundler can't see what it imports.
 # Importing those modules here makes sure they are packed into the built app.
 import argparse, ctypes, datetime, getpass, hashlib, re, string, struct, urllib.request  # noqa: E401,F401
 
@@ -35,7 +35,7 @@ for _name in ("stdout", "stderr"):  # windowed builds have no console
 
 
 def _load_engine():
-    spec = importlib.util.spec_from_file_location("sony_import_engine", os.path.join(HERE, "sony-import.py"))
+    spec = importlib.util.spec_from_file_location("shotloft_engine", os.path.join(HERE, "engine.py"))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -57,7 +57,7 @@ class App:
         self.report = None       # last run_import() result, used by "trash"
         self.last_seen = time.time()
         self.update = E.UpdateCheck()
-        self.cards_override = [c for c in os.environ.get("SONY_IMPORT_TEST_CARDS", "").split(os.pathsep) if c]
+        self.cards_override = [c for c in os.environ.get("SHOTLOFT_TEST_CARDS", "").split(os.pathsep) if c]
 
     def cards(self):
         if self.cards_override:
@@ -303,7 +303,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         url = urllib.parse.urlparse(self.path)
         if url.path == "/":
             if urllib.parse.parse_qs(url.query).get("t", [""])[0] != TOKEN:
-                return self._send(403, b"Open Sony Import from its app icon.", "text/plain")
+                return self._send(403, b"Open ShotLoft from its app icon.", "text/plain")
             with open(os.path.join(HERE, "ui", "index.html"), "rb") as f:
                 page = f.read().replace(b"__TOKEN__", TOKEN.encode())
             return self._send(200, page, "text/html; charset=utf-8")
@@ -340,12 +340,12 @@ class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
 
 def main():
     mode = "window"
-    if "--browser" in sys.argv or os.environ.get("SONY_IMPORT_BROWSER"):
+    if "--browser" in sys.argv or os.environ.get("SHOTLOFT_BROWSER"):
         mode = "browser"
     if "--serve" in sys.argv:
         mode = "serve"
     if "--version" in sys.argv:
-        print(f"sony-import-app {E.__version__}")
+        print(f"shotloft {E.__version__}")
         return 0
     server = Server(("127.0.0.1", 0), Handler)
     url = f"http://127.0.0.1:{server.server_address[1]}/?t={TOKEN}"
@@ -354,8 +354,8 @@ def main():
     if mode == "serve":
         info = json.dumps({"url": url, "token": TOKEN})
         print(info, flush=True)
-        if os.environ.get("SONY_IMPORT_URL_FILE"):  # windowed builds have no console to print to
-            with open(os.environ["SONY_IMPORT_URL_FILE"], "w") as f:
+        if os.environ.get("SHOTLOFT_URL_FILE"):  # windowed builds have no console to print to
+            with open(os.environ["SHOTLOFT_URL_FILE"], "w") as f:
                 f.write(info)
         try:
             while True:
@@ -367,14 +367,14 @@ def main():
         try:
             import webview
             global WINDOW
-            WINDOW = webview.create_window("Sony Import", url, width=760, height=640, min_size=(620, 520))
+            WINDOW = webview.create_window("ShotLoft", url, width=760, height=640, min_size=(620, 520))
             webview.start()
             return 0
         except Exception:
             pass  # no native web view here: fall back to the browser
 
     webbrowser.open(url)
-    print(f"Sony Import is open in your browser: {url}\nClose the page to quit.", flush=True)
+    print(f"ShotLoft is open in your browser: {url}\nClose the page to quit.", flush=True)
     while time.time() - APP.last_seen < 45 or (APP.job and APP.job["state"] == "running"):
         time.sleep(2)
     return 0
