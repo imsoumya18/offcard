@@ -5,6 +5,13 @@ when a new version is out.
 
 ShotLoft was called **Sony Import** up to v2.0.0.
 
+## [2.1.1] - 2026-10-24
+
+- **A new app icon:** a camera aperture in ShotLoft's teal and orange.
+- **The installer shows its progress straight away.** It used to sit silent on a slow
+  connection. Now it counts while connecting to GitHub, then shows a progress bar with how many
+  MB are done. If ShotLoft is open, it asks you to quit it before downloading, not after.
+
 ## [2.1.0] - 2026-10-24
 
 - **Sony Import is now ShotLoft.** A new name for an app that does more than import: it backs up,
