@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
-"""Back up photos and videos from Sony camera cards into Year/Month/Day folders.
+"""Sony Import engine: backs up Sony camera cards into Year/Month/Day folders.
 
-The card is only ever read, never written. "Already backed up" is decided by
-scanning the destination itself (size + capture time + content sample), so
-there is no state file and any destination folder works.
+This is the engine behind the Sony Import desktop app (sony-import-app.py), which loads it at
+start-up. Its commands below are internal: the app's tests and scripts use them. Users use the app.
 
-The backup folder comes from --dest, or the SONY_IMPORT_DEST environment variable.
+The card is only ever read, never written. "Already backed up" is decided by scanning the backup
+folder itself (each file by size + a content fingerprint), so there is no state file.
 
-Subcommands (all print human text; add --json for machine output):
+Internal commands (--json for machine output; --dest can come from SONY_IMPORT_DEST):
   detect  [--dest DIR]                find Sony cards; check the backup drive
-  plan    --dest DIR [--card PATH..]  report what is new on each card
-  import  --dest DIR [--card PATH..]  copy new files (progress bar), write --report
+  plan    --dest DIR [--card PATH..]  what is new on each card
+  import  --dest DIR [--card PATH..]  copy new files, write --report
+  verify  --dest DIR [--card PATH..]  byte-for-byte check: safe to format?
+  eject   [--card PATH..]             safely eject cards
+  check-update                        is a newer release out?
   trash-jpgs --report FILE            move JPGs that have an ARW twin to the Trash
-Run with no subcommand for a fully interactive session in a terminal.
 """
 import argparse
 import getpass
@@ -110,18 +112,6 @@ def bad(text):
 
 def dim(text):
     return paint(text, DIM)
-
-
-def step(n, total, title):
-    rule = "─" if FANCY else "-"
-    head = f"{rule * 2} Step {n} of {total} {DOT} {title} "
-    print("\n" + paint(head + rule * max(0, 60 - len(head)), BOLD, ACCENT))
-
-
-def heading(title):
-    rule = "─" if FANCY else "-"
-    head = f"{rule * 2} {title} "
-    print("\n" + paint(head + rule * max(0, 60 - len(head)), BOLD, ACCENT))
 
 
 def nice_dt(dt):
@@ -572,6 +562,9 @@ def human(n):
         n /= 1024
 
 
+PROGRESS_HOOK = None  # set by the desktop app: hook(label, done, total, files_done, files_total, nbytes, elapsed)
+
+
 class Bar:
     """One-line progress bar. Silent when not on a terminal, unless log=True
     (then it prints 'PROGRESS NN% ...' lines every 5% for scripts and logs)."""
@@ -588,6 +581,9 @@ class Bar:
     def update(self, n=0, file_done=False):
         self.done += n
         self.files_done += 1 if file_done else 0
+        if PROGRESS_HOOK:
+            PROGRESS_HOOK(self.label, self.done, self.total, self.files_done, self.files_total,
+                          self.nbytes, time.time() - self.start)
         if self.tty:
             if time.time() - self.last_draw >= 0.08:
                 self._draw()
@@ -708,10 +704,6 @@ def same_bytes(a, b, bar=None):
             bar.update(size - done)
 
 
-def card_bytes(cards):
-    return sum(os.path.getsize(f) for c in cards for it in scan_card(c) for f in it["files"])
-
-
 def verify(dest, cards, quiet=False):
     """Check that every file on the cards has a byte-for-byte identical copy in the backup."""
     index = DestIndex(dest)
@@ -772,18 +764,6 @@ def print_verify(res):
                              f"file{'s are' if n != 1 else ' is'} safe."))
 
 
-def offer_verify(dest, cards):
-    """Optional last step in the interactive flow."""
-    # ~35 MB/s: what a typical USB card reader manages when reading the card and backup in turn
-    minutes = max(1, round(card_bytes(cards) / (35 * 1024 * 1024) / 60))
-    if not yes(f"Check every file byte by byte before formatting? (about {minutes} min)"):
-        return None
-    heading("Safe to format?")
-    res = verify(dest, cards)
-    print_verify(res)
-    return res
-
-
 # ---------------------------------------------------------------- eject
 
 FILE_MANAGER = "Finder" if IS_MAC else "File Explorer" if IS_WIN else "your file manager"
@@ -823,22 +803,6 @@ def eject(root):
         return False, "no eject tool found (gio or udisksctl)"
     except Exception as e:
         return False, str(e)
-
-
-def offer_eject(cards):
-    """Last question in the interactive flow."""
-    many = len(cards) > 1
-    if not yes(f"Eject the memory card{'s' * many} now?"):
-        print("  " + dim(f"Remember to eject the card{'s' * many} before taking {'them' if many else 'it'} out."))
-        return
-    for c in cards:
-        done, details = eject(c)
-        if done:
-            print("\n  " + ok(f"Ejected {c}. You can take the card out now."))
-        else:
-            print("\n  " + bad(f"Couldn't eject {c}. Please eject it from {FILE_MANAGER}."))
-            if details:
-                print("    " + dim(details))
 
 
 def _windows_drive_is_removable(path):
@@ -1066,24 +1030,6 @@ def print_update(latest):
 
 # ---------------------------------------------------------------- CLI
 
-def ask(q):
-    try:
-        return input(q).strip()
-    except EOFError:
-        return ""
-
-
-def prompt(question, keys=()):
-    """Ask a question; keys is a list of (key, meaning) shown as coloured hints."""
-    hint = "  ".join(f"{paint('[' + k + ']', BOLD, ACCENT)} {meaning}" for k, meaning in keys)
-    arrow = paint("›" if FANCY else ">", BOLD, ACCENT)
-    return ask(f"\n  {paint(question, BOLD)}  {hint}  {arrow} ")
-
-
-def yes(question):
-    return prompt(question, [("y", "yes"), ("n", "no")]).lower() in ("y", "yes")
-
-
 def clean_path(text):
     """Accept a typed path or a folder dragged into the window (quoted or backslash-escaped)."""
     t = text.strip()
@@ -1112,156 +1058,9 @@ def save_config(cfg):
         pass
 
 
-def banner():
-    title, sub = "SONY IMPORT", "Back up your camera card, sorted by date"
-    ver = f"v{__version__}"
-    width = max(len(title) + len(ver) + 4, len(sub)) + 4
-    if FANCY:
-        edge = paint("│", ACCENT)
-        print("\n  " + paint("┌" + "─" * width + "┐", ACCENT))
-        gap = width - 2 - len(title) - len(ver)
-        print(f"  {edge}  {paint(title, BOLD, ACCENT)}{' ' * (gap - 2)}{dim(ver)}  {edge}")
-        print(f"  {edge}  {dim(sub)}{' ' * (width - 2 - len(sub))}{edge}")
-        print("  " + paint("└" + "─" * width + "┘", ACCENT))
-    else:
-        print(f"\n  {paint(title, BOLD, ACCENT)}  {dim(ver)}\n  {dim(sub)}")
-
-
-def choose_dest(last, keep_text="Or just press Enter to use the same folder as last time: "):
-    """Ask for the backup folder. Nothing is assumed: the user drags or types it.
-    The folder used last time is offered, but only used if the user presses Enter."""
-    if IS_WIN:
-        example = "D:\\Camera Backup"
-    elif IS_MAC:
-        example = "/Volumes/MyDrive/Camera Backup"
-    else:
-        example = "/media/you/MyDrive/Camera Backup"
-    print("  " + paint("Where should the backup go?", BOLD))
-    print("  " + dim("Drag the folder into this window (or type its path), then press Enter."))
-    print("  " + dim("Pick any folder you like, for example ") + dim(example))
-    if last:
-        print("  " + dim(keep_text) + dest_path(last))
-    while True:
-        a = ask("  " + paint("›" if FANCY else ">", BOLD, ACCENT) + " ")
-        if a.lower() == "q":
-            return None
-        if not a:
-            if last:
-                return last
-            print("  " + warn("Please drag in or type a folder (or type q to quit)."))
-            continue
-        path = clean_path(a)
-        if os.path.exists(path) and not os.path.isdir(path):
-            print("  " + warn("That is a file, not a folder. Please choose a folder."))
-            continue
-        return path
-
-
-STEPS = 5
-
-
-def interactive(dest):
-    """dest is only set when given on the command line (--dest); otherwise the user chooses."""
-    banner()
-    cfg = load_config()
-    step(1, STEPS, "Backup folder")
-    if dest:
-        print("  " + dim("Backup folder given on the command line: ") + dest_path(dest))
-    else:
-        dest = choose_dest(cfg.get("dest"))
-        if not dest:
-            return 0
-
-    step(2, STEPS, "Connect")
-    while True:  # wait until the card and the backup drive are both plugged in
-        info = detect(dest)
-        print_detect(info)
-        if info["cards"] and info["dest_drive_connected"]:
-            break
-        a = prompt("Plug it in, then press Enter to check again.", [("q", "quit")])
-        if a.lower() == "q":
-            return 1
-        print()
-
-    step(3, STEPS, "Confirm")
-    while True:
-        for c in info["cards"]:
-            print("  " + dim("From ") + " " + card_path(c) + dim("   memory card"))
-        print("  " + dim("To   ") + " " + dest_path(dest) + dim("   backup folder"))
-        a = prompt("Is this right?", [("y", "yes"), ("c", "change folder"), ("q", "quit")]).lower()
-        if a in ("q", "n", "no"):
-            return 0
-        if a in ("y", "yes"):
-            drive = drive_of(dest)
-            if drive and not os.path.isdir(drive):
-                print("\n  " + warn(f"The drive {drive} is not connected. Plug it in or pick another folder."))
-                print()
-                continue
-            break
-        if a == "c":
-            print()
-            dest = choose_dest(dest, "Or just press Enter to keep: ")
-            print()
-
-    if not os.path.isdir(dest):
-        if not yes(f"The folder does not exist yet. Create it?"):
-            return 0
-        os.makedirs(dest)
-    save_config({**cfg, "dest": dest})
-
-    step(4, STEPS, "Check what's new")
-    plan = build_plan(dest, info["cards"])
-    print_plan(plan)
-    if not plan["items"]:
-        print("\n  " + ok("Everything on the card is already backed up. Nothing to copy."))
-        offer_verify(dest, info["cards"])
-        offer_eject(info["cards"])
-        return 0
-    if not plan["enough_space"]:
-        return 1
-    if not yes("Start copying?"):
-        return 0
-
-    step(5, STEPS, "Copy")
-    rep = run_import(plan)
-    print_report(rep)
-    if rep["raw_jpg_pairs"]:
-        print("  " + dim("You have the RAW file for each of these, so the JPGs are extra copies."))
-        if yes(f"Move these JPGs to the {TRASH}?"):
-            try:
-                moved = trash([p["jpg"] for p in rep["raw_jpg_pairs"]])
-                print("\n  " + ok(f"Moved {len(moved)} JPGs to the {TRASH}. You can restore them from there."))
-            except Exception as e:
-                print("\n  " + bad(f"Could not move the JPGs: {e}"))
-    if rep["errors"]:
-        print("\n  " + bad("Some files were not copied. Run Sony Import again to retry them."))
-        return 1
-    offer_verify(dest, info["cards"])
-    print("\n  " + ok("All done. Your photos and videos are backed up."))
-    offer_eject(info["cards"])
-    return 0
-
-
-def run_interactive(dest):
-    """Wrapper for double-click use: show errors and keep the window open at the end."""
-    code = 1
-    update = UpdateCheck()
-    try:
-        code = interactive(dest)
-    except KeyboardInterrupt:
-        print("\n\n  " + warn("Stopped. Nothing half-copied was left behind; run again to finish."))
-    except Exception as e:
-        print("\n\n  " + bad(f"Something went wrong: {e}"))
-    if update.newer():
-        print_update(update.newer())
-    ask("\n  " + dim("Press Enter to close this window."))
-    return code
-
-
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--version", action="version", version=f"sony-import {__version__}")
-    ap.add_argument("--dest", help="backup folder (interactive mode asks if not given)")
     sub = ap.add_subparsers(dest="cmd")
     p = sub.add_parser("detect")
     p.add_argument("--dest", default=DEFAULT_DEST)
@@ -1286,7 +1085,9 @@ def main():
     args = ap.parse_args()
 
     if args.cmd is None:
-        return run_interactive(args.dest)
+        print("Sony Import is a desktop app now: open Sony Import from your Applications folder,\n"
+              "Start menu or app menu. (This file is its engine; see DEVELOPMENT.md.)")
+        return 2
     if args.cmd == "detect":
         info = detect(args.dest)
         print(json.dumps(info, indent=2)) if args.json else print_detect(info)
