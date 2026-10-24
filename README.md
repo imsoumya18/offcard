@@ -73,7 +73,7 @@ To update, run the same line again. No admin rights needed.
 4. Check what it found and type `y` to start copying.
 5. **Planning to format the card?** Type `y` when it offers to check every file byte by byte.
    It tells you when it's safe to format the card in your camera.
-6. When it says **All done**, press Enter to close the window and eject the card.
+6. When it says **All done**, type `y` to **eject the card**, then press Enter to close the window.
 
 Your backup folder will look like this:
 
@@ -96,6 +96,7 @@ Camera Backup/                ← the folder you chose
 - Checks there's enough space on your backup drive before copying anything.
 - Tells you when it's safe to format the card, after checking every file byte by byte.
 - Safe to interrupt. If you close the window midway, just run it again to finish.
+- Ejects the card for you when it's done, so you can take it straight out.
 
 **Keeps them organised**
 - Sorts everything by the date you took it, with videos in a `Videos` folder inside their day.
@@ -132,5 +133,5 @@ last backup folder you used, in `.sony-import.json` in your home folder. You can
 
 ---
 
-Developers: see **[DEVELOPMENT.md](DEVELOPMENT.md)** for running from source, scripting, how it
+**[What's new](CHANGELOG.md)** in each version. Developers: see **[DEVELOPMENT.md](DEVELOPMENT.md)** for running from source, scripting, how it
 works, and releasing. Licensed under [MIT](LICENSE).

@@ -25,6 +25,7 @@ python3 sony-import.py plan   --dest "$DEST"                 # dry run: what wou
 python3 sony-import.py import --dest "$DEST" --report r.json # copy, write a JSON report
 python3 sony-import.py verify --dest "$DEST"                 # byte-for-byte check: safe to format?
 python3 sony-import.py check-update [--json]                 # is a newer release out?
+python3 sony-import.py eject [--card PATH]                   # safely eject the card(s)
 python3 sony-import.py trash-jpgs --report r.json            # move JPGs that have an ARW twin to the Trash
 ```
 
@@ -78,6 +79,10 @@ python3 sony-import.py trash-jpgs --report r.json            # move JPGs that ha
   update command is shown at the end. Turn it off with `SONY_IMPORT_NO_UPDATE_CHECK=1`. The URL
   can be overridden with `SONY_IMPORT_UPDATE_URL`, which the tests use. Subcommands never touch
   the network, except `check-update`.
+- **Eject.** `diskutil eject` on macOS, the Shell "Eject" verb on Windows (it reports nothing, so
+  the app waits for the drive letter to disappear), and `gio mount -e` or `udisksctl` on Linux. It
+  only acts on the top of a mounted drive (`os.path.ismount`), so it can never eject the drive a
+  plain folder sits on. It never formats or deletes.
 - **Saved settings.** The last chosen backup folder is stored in `~/.sony-import.json`. It's only
   offered as the Enter shortcut, never used without asking.
 
@@ -163,11 +168,23 @@ The icon source is [`docs/icon.png`](docs/icon.png) (1024 px). It's drawn in the
 ## Building and releasing
 
 [GitHub Actions](.github/workflows/build.yml) builds standalone apps with PyInstaller on Windows,
-macOS (Apple Silicon and Intel) and Linux, and runs the smoke test against each one. It also runs
-the one-line installers on Windows (PowerShell 5.1), Linux and both Macs. This happens on every push. Pushing a version tag also publishes the apps as a GitHub Release:
+macOS (Apple Silicon and Intel) and Linux. It runs the smoke test against each one, and runs the
+one-line installers on Windows (PowerShell 5.1), Linux and both Macs. This happens on every push.
 
-```bash
-git tag v1.3.1 && git push origin v1.3.1
-```
+To publish a new version:
+1. Add a `## [X.Y.Z] - date` section to [CHANGELOG.md](CHANGELOG.md), written for users. Usually
+   you just rename `## [Unreleased]`.
+2. Bump `__version__` in `sony-import.py`. The app shows it in its banner and uses it for the
+   update notice.
+3. Commit, then tag and push:
 
-Bump `__version__` in `sony-import.py` first; the app shows it in its banner.
+   ```bash
+   git tag vX.Y.Z && git push origin vX.Y.Z
+   ```
+
+The release job publishes the apps with that CHANGELOG section as the release notes, plus the
+install lines ([`.github/scripts/release-notes.sh`](.github/scripts/release-notes.sh)). If the
+section is missing, it falls back to GitHub's automatic notes and shows a warning.
+
+Badges can lag for a few minutes after a release, because the badge service and GitHub cache the
+image.
