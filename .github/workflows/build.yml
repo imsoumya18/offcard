@@ -1,4 +1,4 @@
-# Builds the Sony Import desktop app for each system and tests it. Pushing a tag like v2.0.0
+# Builds the ShotLoft desktop app for each system and tests it. Pushing a tag like v2.0.0
 # also publishes the apps as a GitHub Release, with notes from CHANGELOG.md.
 name: build
 
@@ -26,7 +26,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Test the engine
-        run: python tests/smoke_test.py python sony-import.py
+        run: python tests/smoke_test.py python engine.py
 
   app:
     # The desktop app: a window with the web-style UI, on top of the engine.
@@ -35,13 +35,13 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            asset: sony-import-windows.exe
+            asset: shotloft-windows.exe
           - os: macos-latest          # Apple Silicon (M1 and newer)
-            asset: sony-import-macos-apple-silicon.zip
+            asset: shotloft-macos-apple-silicon.zip
           - os: macos-15-intel        # Intel Macs
-            asset: sony-import-macos-intel.zip
+            asset: shotloft-macos-intel.zip
           - os: ubuntu-22.04          # older glibc, so it runs on most distros
-            asset: sony-import-linux.zip
+            asset: shotloft-linux.zip
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -50,7 +50,7 @@ jobs:
           python-version: "3.12"
 
       - name: Test the app from source
-        run: python tests/app_test.py python sony-import-app.py
+        run: python tests/app_test.py python shotloft.py
 
       - name: Build the app
         shell: bash
@@ -59,23 +59,23 @@ jobs:
           # Native window on Mac and Windows; Linux opens the same page in the browser.
           if [ "$RUNNER_OS" != "Linux" ]; then pip install pywebview; fi
           SEP=":"; [ "$RUNNER_OS" = "Windows" ] && SEP=";"
-          DATA=(--add-data "sony-import.py${SEP}." --add-data "ui${SEP}ui" --add-data "docs/icon.png${SEP}docs")
+          DATA=(--add-data "engine.py${SEP}." --add-data "ui${SEP}ui" --add-data "docs/icon.png${SEP}docs")
           case "$RUNNER_OS" in
             macOS)
-              pyinstaller --noconfirm --windowed --name "Sony Import" --icon docs/AppIcon.icns \
-                --osx-bundle-identifier io.github.imsoumya18.sony-import "${DATA[@]}" sony-import-app.py
+              pyinstaller --noconfirm --windowed --name "ShotLoft" --icon docs/AppIcon.icns \
+                --osx-bundle-identifier io.github.imsoumya18.shotloft "${DATA[@]}" shotloft.py
               # Let the window load the app's own page from 127.0.0.1 (local addresses only), then re-sign.
-              PLIST="dist/Sony Import.app/Contents/Info.plist"
+              PLIST="dist/ShotLoft.app/Contents/Info.plist"
               /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" \
                 -c "Add :NSAppTransportSecurity:NSAllowsLocalNetworking bool true" "$PLIST"
-              codesign --force --deep -s - "dist/Sony Import.app"
-              echo "APP=dist/Sony Import.app/Contents/MacOS/Sony Import" >> "$GITHUB_ENV" ;;
+              codesign --force --deep -s - "dist/ShotLoft.app"
+              echo "APP=dist/ShotLoft.app/Contents/MacOS/ShotLoft" >> "$GITHUB_ENV" ;;
             Windows)
-              pyinstaller --noconfirm --windowed --onefile --name "Sony Import" --icon docs/icon.ico "${DATA[@]}" sony-import-app.py
-              echo "APP=dist/Sony Import.exe" >> "$GITHUB_ENV" ;;
+              pyinstaller --noconfirm --windowed --onefile --name "ShotLoft" --icon docs/icon.ico "${DATA[@]}" shotloft.py
+              echo "APP=dist/ShotLoft.exe" >> "$GITHUB_ENV" ;;
             Linux)
-              pyinstaller --noconfirm --onefile --name sony-import "${DATA[@]}" sony-import-app.py
-              echo "APP=dist/sony-import" >> "$GITHUB_ENV" ;;
+              pyinstaller --noconfirm --onefile --name shotloft "${DATA[@]}" shotloft.py
+              echo "APP=dist/shotloft" >> "$GITHUB_ENV" ;;
           esac
 
       - name: Test the built app
@@ -87,9 +87,9 @@ jobs:
         run: |
           mkdir -p out
           case "$RUNNER_OS" in
-            macOS)   ditto -c -k --keepParent "dist/Sony Import.app" "out/${{ matrix.asset }}" ;;
-            Windows) cp "dist/Sony Import.exe" "out/${{ matrix.asset }}" ;;
-            Linux)   (cd dist && zip -q "../out/${{ matrix.asset }}" sony-import) ;;  # zip keeps the executable bit
+            macOS)   ditto -c -k --keepParent "dist/ShotLoft.app" "out/${{ matrix.asset }}" ;;
+            Windows) cp "dist/ShotLoft.exe" "out/${{ matrix.asset }}" ;;
+            Linux)   (cd dist && zip -q "../out/${{ matrix.asset }}" shotloft) ;;  # zip keeps the executable bit
           esac
 
       - uses: actions/upload-artifact@v4
@@ -117,21 +117,21 @@ jobs:
           merge-multiple: true
       - name: Install with the one-line installer
         env:
-          SONY_IMPORT_RAW: file://${{ github.workspace }}
-          SONY_IMPORT_APPS_DIR: ${{ runner.temp }}/apps
-          SONY_IMPORT_BIN_DIR: ${{ runner.temp }}/bin
-          SONY_IMPORT_NO_REVEAL: "1"
-        run: SONY_IMPORT_RELEASES="file://$PWD/out" bash -c 'cat install.sh | bash'
+          SHOTLOFT_RAW: file://${{ github.workspace }}
+          SHOTLOFT_APPS_DIR: ${{ runner.temp }}/apps
+          SHOTLOFT_BIN_DIR: ${{ runner.temp }}/bin
+          SHOTLOFT_NO_REVEAL: "1"
+        run: SHOTLOFT_RELEASES="file://$PWD/out" bash -c 'cat install.sh | bash'
       - name: Test the installed app
         run: |
           if [ "$RUNNER_OS" = "macOS" ]; then
-            APP="$RUNNER_TEMP/apps/Sony Import.app"
+            APP="$RUNNER_TEMP/apps/ShotLoft.app"
             test -f "$APP/Contents/Resources/AppIcon.icns"
             xattr -l "$APP" | grep -q quarantine && { echo "app is quarantined"; exit 1; }
-            python tests/app_test.py "$APP/Contents/MacOS/Sony Import"
+            python tests/app_test.py "$APP/Contents/MacOS/ShotLoft"
           else
-            test -f "$HOME/.local/share/applications/sony-import.desktop"
-            python tests/app_test.py "$RUNNER_TEMP/bin/sony-import"
+            test -f "$HOME/.local/share/applications/shotloft.desktop"
+            python tests/app_test.py "$RUNNER_TEMP/bin/shotloft"
           fi
 
   installer-windows:
@@ -146,22 +146,22 @@ jobs:
           python-version: "3.12"
       - uses: actions/download-artifact@v4
         with:
-          name: sony-import-windows.exe
+          name: shotloft-windows.exe
           path: out
       - name: Install with the one-line installer
         shell: powershell
         env:
-          SONY_IMPORT_INSTALL_DIR: ${{ runner.temp }}\SonyImport
-          SONY_IMPORT_START_MENU: ${{ runner.temp }}\StartMenu
+          SHOTLOFT_INSTALL_DIR: ${{ runner.temp }}\ShotLoft
+          SHOTLOFT_START_MENU: ${{ runner.temp }}\StartMenu
         run: |
-          $env:SONY_IMPORT_RELEASES = ([System.Uri](Resolve-Path out).Path).AbsoluteUri
+          $env:SHOTLOFT_RELEASES = ([System.Uri](Resolve-Path out).Path).AbsoluteUri
           Get-Content install.ps1 -Raw | Invoke-Expression
       - name: Test the installed app
         shell: powershell
         run: |
-          $exe = Join-Path $env:RUNNER_TEMP 'SonyImport\Sony Import.exe'
+          $exe = Join-Path $env:RUNNER_TEMP 'ShotLoft\ShotLoft.exe'
           if (-not (Test-Path $exe)) { throw 'the app was not installed' }
-          if (-not (Test-Path (Join-Path $env:RUNNER_TEMP 'StartMenu\Sony Import.lnk'))) { throw 'no Start menu shortcut' }
+          if (-not (Test-Path (Join-Path $env:RUNNER_TEMP 'StartMenu\ShotLoft.lnk'))) { throw 'no Start menu shortcut' }
           if (Get-Item $exe -Stream Zone.Identifier -ErrorAction SilentlyContinue) { throw 'the app is marked as downloaded from the internet' }
           python tests/app_test.py "$exe"
           if ($LASTEXITCODE -ne 0) { throw 'the installed app failed its test' }
@@ -187,4 +187,4 @@ jobs:
             echo "::warning::CHANGELOG.md has no section for $GITHUB_REF_NAME; using GitHub's automatic notes"
             NOTES=(--generate-notes)
           fi
-          gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" --title "Sony Import ${GITHUB_REF_NAME#v}" "${NOTES[@]}"
+          gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" --title "ShotLoft ${GITHUB_REF_NAME#v}" "${NOTES[@]}"
