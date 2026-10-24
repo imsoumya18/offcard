@@ -28,15 +28,44 @@ printf '\n  %sShotLoft installer%s\n\n' "$TEAL" "$OFF"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-download() {  # file, then one or more release file names to try in order
-  local out="$1"; shift
+download() {  # label, file, then one or more release file names to try in order
+  local label="$1" out="$2"; shift 2
+  local name url hdr size pid got pct fill mb tot secs start
+  step "Downloading $label..."
   for name in "$@"; do
-    curl -fsIL --retry 2 "$RELEASES/$name" -o /dev/null 2>/dev/null || continue   # does it exist?
-    if [ -t 2 ]; then
-      curl -fL --retry 2 --progress-bar "$RELEASES/$name" -o "$out" && return 0  # progress bar
-    else
-      curl -fsSL --retry 2 "$RELEASES/$name" -o "$out" && return 0
+    url="$RELEASES/$name"
+    if [ ! -t 2 ]; then                                    # scripts, CI: no animation
+      curl -fsSL --retry 2 "$url" -o "$out" 2>/dev/null && return 0
+      continue
     fi
+    # One request: curl writes the response headers to $hdr as they arrive, so the size is known
+    # as soon as GitHub answers, with no extra round trips on slow connections.
+    hdr="$tmp/headers"; : > "$hdr"; : > "$out"
+    curl -fsSL --retry 2 -D "$hdr" "$url" -o "$out" 2>/dev/null & pid=$!
+    start=$SECONDS; size=0
+    while kill -0 "$pid" 2>/dev/null; do
+      [ "$size" -gt 0 ] || size="$(tr -d '\r' < "$hdr" | awk 'tolower($1)=="content-length:" {n=$2} END {print n+0}')"
+      got="$(stat -f%z "$out" 2>/dev/null || stat -c%s "$out" 2>/dev/null || echo 0)"
+      secs=$(( SECONDS - start ))
+      if [ "$size" -le 0 ] || [ "$got" -eq 0 ]; then       # nothing yet: show it's still working
+        printf '\r    %sconnecting to GitHub...%s %ss ' "$DIM" "$OFF" "$secs" >&2
+      else
+        pct=$(( got * 100 / size )); [ "$pct" -gt 100 ] && pct=100
+        fill=$(( pct * 30 / 100 ))
+        mb="$(awk -v n="$got" 'BEGIN {printf "%.1f", n/1048576}')"
+        tot="$(awk -v n="$size" 'BEGIN {printf "%.1f", n/1048576}')"
+        printf '\r    %s%s%s%s %3d%%  %s of %s MB    ' "$TEAL" "$(printf '%*s' "$fill" '' | tr ' ' '#')" "$OFF" \
+          "$(printf '%*s' $(( 30 - fill )) '' | tr ' ' '-')" "$pct" "$mb" "$tot" >&2
+      fi
+      sleep 0.2
+    done
+    if wait "$pid"; then
+      got="$(stat -f%z "$out" 2>/dev/null || stat -c%s "$out" 2>/dev/null || echo 0)"
+      mb="$(awk -v n="$got" 'BEGIN {printf "%.1f", n/1048576}')"
+      printf '\r    %s%s%s 100%%  %s MB, done.                 \n' "$TEAL" "$(printf '%30s' '' | tr ' ' '#')" "$OFF" "$mb" >&2
+      return 0
+    fi
+    printf '\r%60s\r' '' >&2                              # not found: clear the line, try the next name
   done
   fail "Download failed (check your internet connection)"
 }
@@ -74,8 +103,7 @@ case "$(uname -s)" in
     # Check before downloading: only the copy that would be replaced matters.
     wait_until_closed "$apps/(ShotLoft|Sony Import)\.app/Contents/"
 
-    step "Downloading the latest version for Mac ($chip)..."
-    download "$tmp/app.zip" "shotloft-macos-$arch.zip" "sony-import-macos-$arch.zip"
+    download "ShotLoft for Mac ($chip)" "$tmp/app.zip" "shotloft-macos-$arch.zip" "sony-import-macos-$arch.zip"
     ditto -x -k "$tmp/app.zip" "$tmp/unpacked" || fail "Could not unpack the download"
     src="$(find "$tmp/unpacked" -maxdepth 1 -name '*.app' | head -1)"
     [ -n "$src" ] || fail "The download doesn't contain the ShotLoft app"
@@ -119,8 +147,7 @@ case "$(uname -s)" in
     [ "$(uname -m)" = "x86_64" ] || fail "Only 64-bit Intel/AMD Linux is supported for now."
     bin="${SHOTLOFT_BIN_DIR:-$HOME/.local/bin}"
     wait_until_closed "^$bin/shotloft( |$)"
-    step "Downloading the latest version for Linux..."
-    download "$tmp/app.zip" "shotloft-linux.zip" "sony-import-linux.zip"
+    download "ShotLoft for Linux" "$tmp/app.zip" "shotloft-linux.zip" "sony-import-linux.zip"
     unzip -q "$tmp/app.zip" -d "$tmp/unpacked" || fail "Could not unpack the download"
     src="$tmp/unpacked/shotloft"; [ -f "$src" ] || src="$tmp/unpacked/sony-import"
     [ -f "$src" ] || fail "The download doesn't contain the ShotLoft app"

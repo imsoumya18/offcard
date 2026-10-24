@@ -22,6 +22,8 @@
     # Downloads with a progress bar. (Invoke-WebRequest's own progress bar makes PowerShell 5 very
     # slow, so the file is read in 1 MB chunks and progress is shown once per percent.)
     function Get-File($url, $out) {
+        # Show something at once: GitHub can take a while to answer on slow connections.
+        Write-Progress -Activity 'Downloading ShotLoft' -Status 'Connecting to GitHub...' -PercentComplete 0
         $resp = [System.Net.WebRequest]::Create($url).GetResponse()
         $total = $resp.ContentLength
         $in = $resp.GetResponseStream(); $fs = [System.IO.File]::Create($out)
