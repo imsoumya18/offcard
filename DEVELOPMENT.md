@@ -26,13 +26,18 @@ python3 shotloft.py --serve    # no window; print the URL and token (tests)
 
 - **Local server.** A small HTTP server on `127.0.0.1` (random port) serves the page and a JSON API
   (`/api/state`, `/api/dest`, `/api/pick`, `/api/plan`, `/api/import`, `/api/verify`,
-  `/api/eject`, `/api/trash`, `/api/reset`, and for HDR `/api/hdr/days`, `/api/hdr/scan`,
-  `/api/hdr/merge`, `/api/reveal`).
+  `/api/eject`, `/api/trash`, `/api/reset`, and for HDR Merge `/api/hdr/folder`, `/api/hdr/pick`,
+  `/api/hdr/scan`, `/api/hdr/sets`, `/api/hdr/merge`, `/api/reveal`).
   - Every request needs a secret token created at launch, and a `127.0.0.1` Host header, so other
     web pages and other machines can't drive it.
   - Long jobs run in a background thread. The engine reports progress to the page through
-    `PROGRESS_HOOK`. HDR merges have their own job slot, so they can run while a card backs up.
-  - HDR days and scans only accept day folders that are inside the chosen backup folder.
+    `PROGRESS_HOOK`. HDR Merge (its scan and its merges) has its own job slot, so it can run while
+    a card backs up. `/api/state` carries only a summary of it; the page fetches the sets and
+    their previews once per scan from `/api/hdr/sets`.
+  - HDR Merge refuses a folder on a memory card, since ShotLoft never writes to a card.
+- **Views.** The page opens on a list of tools (`TOOLS` in `ui/index.html`); each tool is a view,
+  selected by the URL hash (`#backup`, `#hdr`). A new tool is a new entry there, a view, and its
+  API routes.
 - **Window.** On macOS and Windows the page opens in a native window
   ([pywebview](https://pywebview.flowrl.com/), using the system web view: WebKit on Mac, Edge
   WebView2 on Windows). On Linux, or if that window can't start, it opens in the default browser
@@ -116,7 +121,7 @@ python3 engine.py verify --dest "$DEST" --json           # byte-for-byte check
 python3 engine.py eject  [--card PATH]                   # safely eject the card(s)
 python3 engine.py check-update --json                    # is a newer release out?
 python3 engine.py trash-jpgs --report r.json             # move extra JPGs to the Trash
-python3 engine.py brackets --day "$DEST/2026/10. October/24Oct26" --json   # bracket sets
+python3 engine.py brackets --folder "$DEST" --json       # bracket sets, subfolders too
 python3 hdr.py merge OUT_DIR A.ARW B.ARW C.ARW [--tiff]  # merge one set (needs the HDR libraries)
 ```
 
@@ -134,12 +139,13 @@ python3 hdr.py merge OUT_DIR A.ARW B.ARW C.ARW [--tiff]  # merge one set (needs 
 
 ## How HDR merge works
 
-**Finding sets** (`engine.find_brackets`, standard library). Sony writes each bracket frame's
+**Finding sets** (`engine.find_brackets`, standard library). It reads every RAW file under the
+chosen folder, subfolders included (not hidden or `HDR` folders). Sony writes each bracket frame's
 exposure step into its EXIF (`ExposureBiasValue`), even in M mode. A set is consecutive RAW shots
-at most 2 s apart, from the same camera at the same focal length, whose steps differ and span at
+in one folder (so copies of the same shots in two folders stay apart), at most 2 s apart, from the same camera at the same focal length, whose steps differ and span at
 least 1 EV. A step already in the set starts the next set. Bursts and white-balance or DRO
 brackets keep one exposure, so they never count. The result goes to
-`<day>/HDR/DSC00012-00014_HDR.jpg`, and the backup index skips `HDR` folders, so merges are never
+`<its folder>/HDR/DSC00012-00014_HDR.jpg`, and the backup index skips `HDR` folders, so merges are never
 taken for backed-up files.
 
 **Merging** (`hdr.py`). Every choice below was tested on real a6600 brackets (handheld, ISO 250 and
@@ -177,14 +183,15 @@ global roll-off, for editing.
   - a full backup drive stops the import before anything is copied
   - eject refuses a plain folder
   - a file moved into an `HDR` folder doesn't count as backed up
-  - `brackets` finds two bracket sets (with a burst between them that isn't one), names their
-    output, and shows a set as merged once its file exists
+  - `brackets` searches subfolders, finds two bracket sets (with a burst between them that isn't
+    one), keeps a copy of the same shots in another folder apart, names their output, and shows a
+    set as merged once its file exists
   - the update check reports a newer release, ignores an older one, and stays quiet when offline
 - **[`tests/app_test.py`](tests/app_test.py)** tests the app the way its page uses it:
   - choose a folder, check what's new, back up, verify, try to eject, then check again
   - requests with no token, a wrong token, or a foreign Host header are refused
-  - HDR: a day with bracket sets is listed and scanned, days outside the backup are refused, and a
-    merge of fake RAW files fails cleanly
+  - HDR Merge: a folder on a card is refused, the backup folder is searched with its subfolders in
+    the background, and a merge of fake RAW files fails cleanly
   - `--hdr-selftest`: the merge itself, inside that app (so a built app's bundled libraries are
     checked too), on synthetic frames: alignment, shadow noise, and a window recovered from the
     dark frame (`python3 hdr.py selftest` runs the same test from source)

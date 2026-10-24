@@ -52,11 +52,19 @@
   ul.files { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
   .days { font-size: 13px; color: var(--muted); margin: -6px 0 14px; }
   .wait { color: var(--muted); font-size: 14px; }
-  #hdr { margin-top: 22px; }
-  .hdrhead { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-  .hdrhead h2 { font-size: 15px; font-weight: 600; margin: 0; flex: 1; }
-  .hdrhead h2 span { font-weight: 400; color: var(--muted); }
-  select { font: inherit; font-size: 13px; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+  header .back { border: 0; background: none; color: var(--accent); font-size: 14px; padding: 4px 6px 4px 0; }
+  header h1 span { color: var(--muted); font-weight: 400; }
+  .tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
+  .tool { display: flex; gap: 14px; align-items: flex-start; text-align: left; padding: 16px; border-radius: 12px; min-height: 120px; }
+  .tool:hover { border-color: var(--accent); }
+  .tool .ico { width: 42px; height: 42px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; flex: none; }
+  .tool .name { font-size: 16px; font-weight: 600; margin-bottom: 2px; }
+  .tool .desc { font-size: 13px; color: var(--muted); }
+  .tool .stat { font-size: 12.5px; margin-top: 8px; }
+  .hint { font-size: 12.5px; color: var(--muted); margin: 14px 2px 0; }
+  .fold { font-size: 12.5px; color: var(--muted); margin: 14px 2px 6px; display: flex; gap: 6px; align-items: center; }
+  .fold b { color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pickrow { display: flex; justify-content: space-between; align-items: center; margin: 2px 2px 10px; font-size: 13px; color: var(--muted); }
   .sets { display: grid; gap: 8px; margin-bottom: 12px; }
   .set { display: flex; align-items: center; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px 8px 10px; cursor: pointer; }
   .set.on { border-color: var(--accent); }
@@ -74,18 +82,25 @@
 <body>
 <main>
   <header>
+    <button class="back" id="back" onclick="go('')" hidden>‹ Tools</button>
     <img src="/icon.png" alt="">
-    <h1>ShotLoft</h1>
+    <h1 id="title">ShotLoft</h1>
     <span class="ver" id="ver"></span>
   </header>
   <div id="update"></div>
-  <div class="grid2">
-    <div class="box" id="card"></div>
-    <div class="box" id="folder"></div>
-  </div>
   <div id="flash"></div>
-  <div id="main"></div>
-  <div id="hdr"></div>
+  <section id="v-home"></section>
+  <section id="v-backup" hidden>
+    <div class="grid2">
+      <div class="box" id="card"></div>
+      <div class="box" id="folder"></div>
+    </div>
+    <div id="main"></div>
+  </section>
+  <section id="v-hdr" hidden>
+    <div class="box" id="hdrfolder" style="margin-bottom:16px"></div>
+    <div id="hdrmain"></div>
+  </section>
 </main>
 <script>
 const TOKEN = "__TOKEN__";
@@ -232,66 +247,112 @@ function mainHtml() {
   return "";
 }
 
-// ---------------------------------------------------------------- HDR merge
-const H = { dest: undefined, days: [], day: null, sets: null, sel: new Set(), tiff: false, loading: false, seenJob: null, seenImport: null, err: null };
+// ---------------------------------------------------------------- tools and views
+// The launch screen lists the tools; each tool is a view (#backup, #hdr). More tools go in TOOLS.
+const ICONS = {
+  backup: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v14H7z"/><path d="M10 3v4M13 3v4"/><path d="M12.5 11v6M10 14.5l2.5 2.5 2.5-2.5"/></svg>`,
+  hdr: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="12" height="12" rx="2"/><rect x="6" y="5" width="12" height="12" rx="2" opacity=".6"/><rect x="9" y="3" width="12" height="12" rx="2" opacity=".35"/></svg>`,
+};
+const TOOLS = [
+  { id: "backup", name: "Card Backup", desc: "Copy new photos and videos from a memory card into dated folders.",
+    stat: () => S.job && S.job.state === "running" && S.job.kind === "import" ? `<span class="attn">Copying…</span>`
+      : S.cards.length ? `<span class="attn">${esc(S.cards.map(c => c.name).join(", "))} connected</span>` : `<span class="sub">No card connected</span>` },
+  { id: "hdr", name: "HDR Merge", desc: "Blend bracketed shots into one photo with detail in the brights and the darks.",
+    stat: () => S.hdr_job && S.hdr_job.state === "running" ? `<span class="attn">${S.hdr_job.kind === "merge" ? "Merging…" : "Looking for brackets…"}</span>`
+      : S.hdr_folder ? `<span class="sub">${esc(shortPath(S.hdr_folder))}</span>` : `<span class="sub">Choose a folder to start</span>` },
+];
+const view = () => TOOLS.some(t => t.id === location.hash.slice(1)) ? location.hash.slice(1) : "";
+function go(id) { location.hash = id; }
+window.addEventListener("hashchange", () => { flash = null; render(); });
+
+function renderHome() {
+  put("v-home", `<p class="wait" style="margin:0 2px 12px">What would you like to do?</p><div class="tools">` + TOOLS.map(t => `<button class="tool" onclick="go('${t.id}')">
+      <div class="ico">${ICONS[t.id]}</div>
+      <div><div class="name">${t.name}</div><div class="desc">${t.desc}</div><div class="stat">${t.stat()}</div></div></button>`).join("") + `</div>`);
+}
+
+// ---------------------------------------------------------------- HDR Merge
+const H = { sets: null, setsJob: undefined, folder: undefined, sel: new Set(), tiff: false, scanned: undefined };
 const evs = b => b.map(x => (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(x)).join(", ");
 const setName = s => s.names.length > 1 ? `${s.names[0].replace(/\.ARW$/i, "")}–${s.names[s.names.length - 1].replace(/\.ARW$/i, "").replace(/^\D+/, "")}` : s.names[0];
-async function hdrDays() {
-  try { H.days = (await api("/api/hdr/days")).days; } catch (e) { H.days = []; }
-  if (H.days.length && !H.days.some(d => d.day === H.day)) hdrScan(H.days[0].day); else renderHdr();
-}
-async function hdrScan(day) {
-  H.day = day; H.loading = true; H.err = null; renderHdr();
-  try {
-    const r = await api("/api/hdr/scan", { day });
-    if (r.day !== H.day) return;
-    H.sets = r.sets; H.sel = new Set(r.sets.filter(s => !s.done).map(s => s.id));
-  } catch (e) { H.sets = []; H.err = e.message; }
-  H.loading = false; renderHdr();
-}
+const hdrPick = () => act(() => api("/api/hdr/pick", {}));
+const hdrSetFolder = path => act(() => api("/api/hdr/folder", { path }));
+const hdrScan = () => act(() => api("/api/hdr/scan", {}));
+const hdrMerge = () => act(() => api("/api/hdr/merge", { ids: [...H.sel], tiff: H.tiff }));
+const hdrReveal = id => act(() => api("/api/reveal", { id }));
 function hdrToggle(id) { H.sel.has(id) ? H.sel.delete(id) : H.sel.add(id); renderHdr(); }
-function hdrMerge() {
-  act(() => api("/api/hdr/merge", { day: H.day, ids: [...H.sel], tiff: H.tiff }));
+function hdrAll(on) { H.sel = new Set(on ? H.sets.map(s => s.id) : []); renderHdr(); }
+async function hdrLoadSets(jobId) {
+  H.setsJob = jobId;
+  const r = await api("/api/hdr/sets");
+  H.sets = r.sets;
+  if (H.sets) H.sel = new Set(H.sets.filter(s => !s.done).map(s => s.id));
+  renderHdr();
 }
-const hdrReveal = () => act(() => api("/api/reveal", { day: H.day }));
+
+function renderHdrFolder() {
+  if (!S.hdr_folder) {
+    if (put("hdrfolder", `<div class="lbl">Folder with bracketed shots</div><button onclick="hdrPick()">Choose folder</button>
+      ${S.dest ? `<button onclick="hdrSetFolder(S.dest)">Use backup folder</button>` : ""}
+      <input type="text" id="hdrtyped" placeholder="or paste a folder path and press Enter">
+      <div class="sub" style="margin-top:6px">Your backup folder works: ShotLoft looks through every folder inside it.</div>`, "box drop")) {
+      const inp = document.getElementById("hdrtyped");
+      inp.onkeydown = e => { if (e.key === "Enter" && inp.value.trim()) hdrSetFolder(inp.value.trim()); };
+    }
+    return;
+  }
+  put("hdrfolder", `<div class="lbl"><span>Folder with bracketed shots</span><button class="link" onclick="hdrPick()">Change</button></div>
+    <div class="big" title="${esc(S.hdr_folder)}">${esc(shortPath(S.hdr_folder))}</div>
+    <div class="sub">${S.hdr_folder_exists ? "Searched with all its subfolders" : `<span class="bad">Not found. Is its drive connected?</span>`}</div>`, "box");
+}
 
 function renderHdr() {
-  if (!S || !S.dest || !S.dest_drive_connected) return put("hdr", "");
+  if (view() !== "hdr") return;
+  renderHdrFolder();
   const j = S.hdr_job;
-  if (H.dest !== S.dest) { Object.assign(H, { dest: S.dest, days: [], day: null, sets: null }); hdrDays(); }
-  if (S.job && S.job.kind === "import" && S.job.state === "done" && H.seenImport !== S.job) { H.seenImport = S.job; hdrDays(); }
-  if (j && j.state !== "running" && H.seenJob !== j.id) { H.seenJob = j.id; if (H.day) hdrScan(H.day); }
-  if (!H.days.length) return put("hdr", "");
-  const opts = H.days.map(d => `<option value="${esc(d.day)}"${d.day === H.day ? " selected" : ""}>${esc(d.label)}</option>`).join("");
-  let html = `<div class="hdrhead"><h2>HDR <span>· merge bracketed shots</span></h2>
-    <select onchange="hdrScan(this.value)" ${j && j.state === "running" ? "disabled" : ""}>${opts}</select></div>`;
-  if (S.hdr_missing) return put("hdr", html + `<div class="msg info">${esc(S.hdr_missing)}</div>`);
+  if (S.hdr_missing) return put("hdrmain", `<div class="msg info">${esc(S.hdr_missing)}</div>`);
+  if (!S.hdr_folder || !S.hdr_folder_exists) return put("hdrmain", "");
+  // A new folder, or nothing scanned yet: look for bracket sets. Fresh results: fetch them once.
+  if (H.folder !== S.hdr_folder) { H.folder = S.hdr_folder; H.sets = null; H.setsJob = undefined; }
+  if (j && j.state === "done" && H.setsJob !== j.id) hdrLoadSets(j.id);
+  if (H.sets === null && (!j || j.state !== "running") && H.scanned !== S.hdr_folder) { H.scanned = S.hdr_folder; hdrScan(); }
   if (j && j.state === "running") {
-    const p = j.progress || { done: 0, total: 1, name: "", stage: "Starting" };
-    const pct = Math.floor(Math.min(p.done / p.total, 1) * 100);
-    return put("hdr", html + `<div class="panel"><div class="row"><span><b style="color:var(--text)">Merging ${esc(p.name.replace(/_HDR\.jpg$/, ""))}</b> · ${esc(p.stage)}</span><span>${pct}%</span></div>
-      <div class="bar"><div style="width:${pct}%"></div></div><div class="row"><span>${Math.min(Math.floor(p.done) + 1, p.total)} of ${plural(p.total, "set")} · about 30 seconds each</span></div></div>`);
+    const p = j.progress || { done: 0, total: 1 };
+    const pct = Math.floor(Math.min(p.done / Math.max(p.total, 1), 1) * 100);
+    const head = j.kind === "merge" ? `Merging ${esc((p.name || "").replace(/_HDR\.jpg$/, ""))}` : "Looking for bracketed shots";
+    const stage = j.kind === "merge" ? (p.stage || "") : (p.stage || "Reading photos");
+    const detail = j.kind === "merge" ? `${Math.min(Math.floor(p.done) + 1, p.total)} of ${plural(p.total, "set")} · about 30 seconds each`
+      : stage === "Making previews" ? `${p.done} of ${plural(p.total, "set")}` : `${p.done.toLocaleString()} of ${plural(p.total, "photo")}`;
+    return put("hdrmain", `<div class="panel"><div class="row"><span><b style="color:var(--text)">${head}</b> · ${esc(stage)}</span><span>${pct}%</span></div>
+      <div class="bar"><div style="width:${pct}%"></div></div><div class="row"><span>${detail}</span></div></div>`);
   }
-  if (j && j.state === "done" && j.result && j.result.day === H.day) {
-    const r = j.result;
-    if (r.merged.length) html += `<div class="msg good"><b>Saved ${plural(r.merged.length, "HDR photo")}</b> in the day's HDR folder. <button class="link" onclick="hdrReveal()">Show in ${esc(S.file_manager)}</button></div>`;
-    if (r.failed.length) html += `<div class="msg bad"><b>${plural(r.failed.length, "set")} couldn't be merged.</b><ul class="files">${r.failed.map(f => `<li>${esc(f.file)} <span class="sub">${esc(f.error)}</span></li>`).join("")}</ul></div>`;
+  let html = "";
+  if (j && j.state === "error") html += `<div class="msg bad">${esc(j.error)}</div><button onclick="hdrScan()">Try again</button>`;
+  if (j && j.state === "done" && j.kind === "merge" && j.result) {
+    if (j.result.merged) html += `<div class="msg good"><b>Saved ${plural(j.result.merged, "HDR photo")}</b> in the HDR folder next to the shots they came from.</div>`;
+    if (j.result.failed.length) html += `<div class="msg bad"><b>${plural(j.result.failed.length, "set")} couldn't be merged.</b><ul class="files">${j.result.failed.map(f => `<li>${esc(f.file)} <span class="sub">${esc(f.error)}</span></li>`).join("")}</ul></div>`;
   }
-  if (j && j.state === "error") html += `<div class="msg bad">${esc(j.error)}</div>`;
-  if (H.err) html += `<div class="msg bad">${esc(H.err)}</div>`;
-  if (H.loading || H.sets === null) return put("hdr", html + `<p class="wait">Looking for bracketed shots…</p>`);
-  if (!H.sets.length) return put("hdr", html + `<p class="wait">No bracketed shots on this day. To use HDR, shoot with your camera's exposure bracketing (BRK C), in RAW.</p>`);
-  html += `<div class="sets">` + H.sets.map(s => `<label class="set${H.sel.has(s.id) ? " on" : ""}">
+  if (H.sets === null) return put("hdrmain", html || `<p class="wait">Looking for bracketed shots…</p>`);
+  if (!H.sets.length) return put("hdrmain", html + `<p class="wait">No bracketed shots in this folder or its subfolders. To use HDR Merge, shoot with your camera's exposure bracketing (BRK C), in RAW.</p>
+    <button onclick="hdrScan()">Look again</button>`);
+  const done = H.sets.filter(s => s.done).length;
+  html += `<div class="pickrow"><span>${plural(H.sets.length, "set")} found${done ? `, ${done} already merged` : ""}</span>
+    <span><button class="link" onclick="hdrAll(true)">Select all</button> · <button class="link" onclick="hdrAll(false)">None</button> · <button class="link" onclick="hdrScan()">Look again</button></span></div>`;
+  let folder = null;
+  html += H.sets.map(s => {
+    let head = "";
+    if (s.folder !== folder) { folder = s.folder; head = `<div class="fold">In <b>${esc(s.folder ? s.folder.split(/[\\/]/).join(" / ") : "this folder")}</b></div>`; }
+    return head + `<label class="set${H.sel.has(s.id) ? " on" : ""}" style="margin-bottom:8px">
       <input type="checkbox" ${H.sel.has(s.id) ? "checked" : ""} onchange="hdrToggle(${s.id})">
       ${s.thumb ? `<img src="${s.thumb}" alt="">` : `<div class="noimg"></div>`}
-      <div class="t"><b>${esc(s.time)}</b> · ${esc(setName(s))}<div class="sub">${s.names.length} shots · ${evs(s.biases)} EV</div></div>
-      ${s.done ? `<span class="sub good">Merged ✓</span>` : ""}</label>`).join("") + `</div>`;
-  html += `<label class="opt"><input type="checkbox" ${H.tiff ? "checked" : ""} onchange="H.tiff = this.checked; renderHdr()"> Also save a 16-bit TIFF for editing (about 125 MB each)</label>`;
+      <div class="t"><b>${esc(s.date)} · ${esc(s.time)}</b> · ${esc(setName(s))}<div class="sub">${s.names.length} shots · ${evs(s.biases)} EV</div></div>
+      ${s.done ? `<span class="sub good">Merged ✓ <button class="link" onclick="event.preventDefault(); hdrReveal(${s.id})">Show</button></span>` : ""}</label>`;
+  }).join("");
+  html += `<label class="opt" style="margin-top:12px"><input type="checkbox" ${H.tiff ? "checked" : ""} onchange="H.tiff = this.checked; renderHdr()"> Also save a 16-bit TIFF for editing (about 125 MB each)</label>`;
   const n = H.sel.size, redo = H.sets.filter(s => H.sel.has(s.id) && s.done).length;
-  html += `<button class="go" onclick="hdrMerge()" ${n ? "" : "disabled"}>${n ? `Merge ${plural(n, "set")} to HDR` : "Choose sets to merge"}</button>`;
-  if (redo) html += ` <span class="sub">${plural(redo, "set")} already merged will be redone.</span>`;
-  if (H.sets.some(s => s.done)) html += ` <button class="link" style="margin-left:8px" onclick="hdrReveal()">Show HDR folder</button>`;
-  put("hdr", html);
+  html += `<button class="primary" onclick="hdrMerge()" ${n ? "" : "disabled"}>${n ? `Merge ${plural(n, "set")} to HDR` : "Choose sets to merge"}</button>`;
+  if (redo) html += `<p class="hint">${plural(redo, "set")} already merged will be made again.</p>`;
+  put("hdrmain", html);
 }
 
 function render() {
@@ -299,7 +360,13 @@ function render() {
   document.getElementById("ver").textContent = "v" + S.version;
   document.getElementById("update").innerHTML = S.update ? `<div class="msg info"><b>A new version is available: v${esc(S.update.latest)}.</b> To update, run this line in ${navigator.platform.startsWith("Win") ? "PowerShell" : "Terminal"}:<br><code>${esc(S.update.line)}</code></div>` : "";
   document.getElementById("flash").innerHTML = flash && Date.now() - flash.t < 15000 ? `<div class="msg ${flash.kind}">${flash.html}</div>` : "";
-  renderCard(); renderFolder(); renderMain(); renderHdr();
+  const v = view(), tool = TOOLS.find(t => t.id === v);
+  for (const id of ["home", ...TOOLS.map(t => t.id)]) document.getElementById("v-" + id).hidden = (id === "home" ? v !== "" : id !== v);
+  document.getElementById("back").hidden = !tool;
+  put("title", tool ? `ShotLoft <span>· ${tool.name}</span>` : "ShotLoft");
+  if (!tool) renderHome();
+  if (v === "backup") { renderCard(); renderFolder(); renderMain(); }
+  if (v === "hdr") renderHdr();
 }
 async function refresh() { try { S = await api("/api/state"); render(); } catch (e) {} }
 const running = () => S && ((S.job && S.job.state === "running") || (S.hdr_job && S.hdr_job.state === "running"));

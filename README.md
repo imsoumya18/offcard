@@ -70,8 +70,13 @@ To update, run the same line again. No admin rights needed.
 
 ## How to use it
 
+ShotLoft opens on its tools: **Card Backup** and **HDR Merge**. Click one to start; **‹ Tools**
+takes you back.
+
+### Card Backup
+
 1. Put the memory card in your computer, and plug in the drive you back up to.
-2. Open **ShotLoft**. It finds the card by itself.
+2. Open **ShotLoft** and click **Card Backup**. It finds the card by itself.
 3. The first time, click **Choose backup folder** and pick any folder on any drive. It remembers
    the folder for next time.
 4. It shows what's new and what's already backed up. Click **Back up** and watch the progress bar.
@@ -95,19 +100,21 @@ Camera Backup/                ← the folder you chose
                 └── DSC00012-00014_HDR.jpg
 ```
 
-### HDR: merge bracketed shots
+### HDR Merge
 
 For a scene with very bright and very dark parts (a room with a window, a sunset), take a few
 shots at different exposures and let ShotLoft merge them into one photo where both look right.
 
 1. **On the camera:** set the drive mode to **Continuous Bracket** (BRK C), for example 3 shots at
    2.0 or 3.0 EV, and shoot **RAW**. Hold the camera steady, or use a tripod.
-2. **In ShotLoft:** the **HDR** section under your backup lists every day that has photos. Pick a
-   day, and it finds the bracketed sets by itself, with a preview of each.
+2. **In ShotLoft:** click **HDR Merge** and choose a folder (your backup folder works). ShotLoft
+   looks through it and every folder inside it, and finds the bracketed sets by itself, with a
+   preview of each.
 3. Tick the sets you want and click **Merge to HDR**. Each takes about 30 seconds.
-4. The result goes into an `HDR` folder inside that day, named after the shots it came from. Your
-   original photos are never changed. Tick **Also save a 16-bit TIFF** if you want to edit the
-   result further in Lightroom or Photoshop.
+4. Each result goes into an `HDR` folder next to the shots it came from, named after them. Your
+   original photos are never changed, and a memory card is never written to: back it up first.
+   Tick **Also save a 16-bit TIFF** if you want to edit the result further in Lightroom or
+   Photoshop.
 
 ## What it does
 
@@ -126,14 +133,16 @@ shots at different exposures and let ShotLoft merge them into one photo where bo
 - Shot in RAW + JPG? It offers to move the extra JPGs to the Trash, where you can restore them.
 
 **Makes HDR photos**
-- Finds your bracketed shots by itself, and merges each set into one natural-looking photo:
-  detail in the bright window *and* the dark corner, with no "HDR look".
+- Finds your bracketed shots by itself, in any folder and all its subfolders, and merges each set
+  into one natural-looking photo: detail in the bright window *and* the dark corner, with no
+  "HDR look".
 - Lines up handheld shots, and leaves out anything that moved between them, so there are no ghosts.
 - Uses every shot's clean parts, so shadows have far less noise than any single shot.
 - Saves a full-size JPG, and a 16-bit TIFF for editing if you want one.
 
 **Stays easy**
-- One window: your card, your backup folder, what's new, and one button.
+- One window with a tool for each job. For a backup: your card, your backup folder, what's new,
+  and one button.
 - One line to install on Windows, Mac or Linux, with no security warnings.
 - Follows your computer's light or dark mode, and tells you when an update is out.
 

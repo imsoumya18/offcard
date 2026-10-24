@@ -15,7 +15,7 @@ Internal commands (--json for machine output; --dest can come from SHOTLOFT_DEST
   eject   [--card PATH..]             safely eject cards
   check-update                        is a newer release out?
   trash-jpgs --report FILE            move JPGs that have an ARW twin to the Trash
-  brackets --day DIR                  exposure-bracketed sets in a day folder (for HDR merge)
+  brackets --folder DIR               exposure-bracketed sets under a folder (for HDR merge)
 """
 import argparse
 import getpass
@@ -270,18 +270,30 @@ def hdr_name(names):
     return base + "_HDR.jpg"
 
 
-def find_brackets(folder):
-    """Exposure-bracketed sets among the RAW photos in a day folder, oldest first.
+def raw_files(folder):
+    """Every RAW photo under folder, subfolders included, except hidden and HDR folders."""
+    found = []
+    for dirpath, dirnames, filenames in os.walk(folder):
+        dirnames[:] = sorted(d for d in dirnames if not d.startswith(".") and d != HDR_DIR)
+        found += [os.path.join(dirpath, fn) for fn in sorted(filenames)
+                  if not fn.startswith(".") and fn.upper().endswith(".ARW")]
+    return found
 
-    A set is consecutive shots, at most BRACKET_GAP seconds apart, from the same camera at the same
-    focal length, whose exposure compensation steps (for example 0, -2, +2): the camera writes each
-    frame's step into its EXIF. Bursts, and white-balance or DRO brackets, keep one exposure, so
-    they don't count. A step already in the set starts the next set."""
+
+def find_brackets(folder, progress=None):
+    """Exposure-bracketed sets among the RAW photos under folder (subfolders too), as a list
+    ordered by folder, then time. progress(done, total) is called while EXIF is read.
+
+    A set is consecutive shots in one folder, at most BRACKET_GAP seconds apart, from the same
+    camera at the same focal length, whose exposure compensation steps (for example 0, -2, +2):
+    the camera writes each frame's step into its EXIF. Bursts, and white-balance or DRO brackets,
+    keep one exposure, so they don't count. A step already in the set starts the next set. Sets
+    never span folders, so two copies of the same shots in different folders stay apart."""
+    files = raw_files(folder)
     shots = []
-    for fn in sorted(os.listdir(folder)):
-        if fn.startswith(".") or not fn.upper().endswith(".ARW"):
-            continue
-        p = os.path.join(folder, fn)
+    for i, p in enumerate(files):
+        if progress and i % 25 == 0:
+            progress(i, len(files))
         try:
             with open(p, "rb") as f:
                 x = _tiff_fields(f, 0)
@@ -290,22 +302,24 @@ def find_brackets(folder):
         except Exception:
             continue
         if "bias" in x and "exposure_time" in x:
-            shots.append({"when": when, "name": fn, "path": p, "exif": x})
-    shots.sort(key=lambda s: (s["when"], s["name"]))
+            shots.append({"when": when, "dir": os.path.dirname(p), "name": os.path.basename(p), "path": p, "exif": x})
+    if progress:
+        progress(len(files), len(files))
+    shots.sort(key=lambda s: (s["dir"], s["when"], s["name"]))
 
     sets, cur = [], []
 
     def close():
         biases = [s["exif"]["bias"] for s in cur]
         if len(cur) >= 2 and max(biases) - min(biases) >= BRACKET_SPAN:
-            out = os.path.join(folder, HDR_DIR, hdr_name([s["name"] for s in cur]))
+            out = os.path.join(cur[0]["dir"], HDR_DIR, hdr_name([s["name"] for s in cur]))
             sets.append({"files": [s["path"] for s in cur], "names": [s["name"] for s in cur],
-                         "biases": [round(b, 1) for b in biases], "taken": cur[0]["exif"]["taken"],
-                         "output": out, "done": os.path.exists(out)})
+                         "folder": cur[0]["dir"], "biases": [round(b, 1) for b in biases],
+                         "taken": cur[0]["exif"]["taken"], "output": out, "done": os.path.exists(out)})
 
     for s in shots:
         prev = cur[-1] if cur else None
-        if prev and (s["when"] - prev["when"] <= BRACKET_GAP
+        if prev and (s["dir"] == prev["dir"] and s["when"] - prev["when"] <= BRACKET_GAP
                      and s["exif"].get("model") == prev["exif"].get("model")
                      and s["exif"].get("focal_length") == prev["exif"].get("focal_length")
                      and all(abs(s["exif"]["bias"] - c["exif"]["bias"]) > 0.05 for c in cur)):
@@ -317,27 +331,16 @@ def find_brackets(folder):
     return sets
 
 
-DAY_DIR = re.compile(r"^(\d{2})([A-Z][a-z]{2})(\d{2})$")  # 24Oct26
-
-
-def day_folders(dest):
-    """Day folders in the backup, newest first, as [(relative path, absolute path)]."""
-    days = []
-    if not os.path.isdir(dest):
-        return days
-    for y in os.listdir(dest):
-        if not re.match(r"^\d{4}$", y) or not os.path.isdir(os.path.join(dest, y)):
-            continue
-        for m in os.listdir(os.path.join(dest, y)):
-            mm = re.match(r"^(\d{1,2})\. ", m)
-            if not mm or not os.path.isdir(os.path.join(dest, y, m)):
-                continue
-            for d in os.listdir(os.path.join(dest, y, m)):
-                dd = DAY_DIR.match(d)
-                if dd and os.path.isdir(os.path.join(dest, y, m, d)):
-                    days.append(((int(y), int(mm.group(1)), int(dd.group(1))), os.path.join(y, m, d)))
-    days.sort(reverse=True)
-    return [(rel, os.path.join(dest, rel)) for _, rel in days]
+def card_root(path):
+    """The Sony memory card that path is on, or None. ShotLoft never writes to a card."""
+    p = os.path.abspath(path)
+    while True:
+        if is_sony_card(p):
+            return p
+        parent = os.path.dirname(p)
+        if parent == p:
+            return None
+        p = parent
 
 
 def fingerprint(path):
@@ -1197,8 +1200,8 @@ def main():
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("trash-jpgs", help="move JPGs that have an ARW twin to the Trash")
     p.add_argument("--report", required=True)
-    p = sub.add_parser("brackets", help="exposure-bracketed sets in a day folder")
-    p.add_argument("--day", required=True)
+    p = sub.add_parser("brackets", help="exposure-bracketed sets under a folder, subfolders too")
+    p.add_argument("--folder", required=True)
     p.add_argument("--json", action="store_true")
     args = ap.parse_args()
 
@@ -1240,12 +1243,12 @@ def main():
         print(f"Moved {len(moved)} JPGs to the Trash.")
         return 0
     if args.cmd == "brackets":
-        sets = find_brackets(args.day)
+        sets = find_brackets(args.folder)
         if args.json:
             print(json.dumps(sets, indent=2))
         else:
             for s in sets:
-                print(f"{s['taken'][11:19]}  {', '.join(s['names'])}  EV {s['biases']}"
+                print(f"{os.path.relpath(s['folder'], args.folder)}  {s['taken'][11:19]}  {', '.join(s['names'])}  EV {s['biases']}"
                       f"  -> {os.path.basename(s['output'])}{'  (merged)' if s['done'] else ''}")
             print(f"{len(sets)} bracket set{'' if len(sets) == 1 else 's'}")
         return 0

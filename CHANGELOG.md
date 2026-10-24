@@ -7,12 +7,14 @@ ShotLoft was called **Sony Import** up to v2.0.0.
 
 ## [Unreleased]
 
-- **HDR merge.** Shot an exposure bracket (BRK C)? ShotLoft finds the sets in your backup by
-  itself and merges each one into a single, natural-looking photo, with detail in both the
-  brightest and darkest parts. It lines up handheld shots, leaves out anything that moved, and
-  uses the cleanest parts of every shot, so shadows have much less noise. The result goes into an
-  `HDR` folder inside the day, with an optional 16-bit TIFF for editing. Your originals are never
-  changed.
+- **A home for every tool.** ShotLoft now opens on its tools, **Card Backup** and **HDR Merge**,
+  so you pick what you want to do. More tools will join them.
+- **HDR Merge.** Shot an exposure bracket (BRK C)? Choose a folder, and ShotLoft finds the sets in
+  it and all its subfolders by itself, then merges each one into a single, natural-looking photo
+  with detail in both the brightest and darkest parts. It lines up handheld shots, leaves out
+  anything that moved, and uses the cleanest parts of every shot, so shadows have much less noise.
+  The result goes into an `HDR` folder next to the shots, with an optional 16-bit TIFF for editing.
+  Your originals are never changed.
 
 ## [2.1.1] - 2026-10-24
 

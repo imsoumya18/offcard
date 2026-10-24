@@ -217,18 +217,26 @@ def main():
         os.rename(os.path.join(hdr_dir, "DSC00002.ARW"), os.path.join(feb, "DSC00002.ARW"))
         os.rmdir(hdr_dir)
 
-        # Bracket sets for HDR: two sets found, the burst between them isn't one.
-        day = os.path.join(tmp, "brackets", "01Mar26")
+        # Bracket sets for HDR, searched through subfolders: two sets found, the burst between them
+        # isn't one, and a copy of the same shots in another folder makes its own two sets.
+        root = os.path.join(tmp, "brackets")
+        day = os.path.join(root, "2026", "01Mar26")
         make_bracket_day(day)
-        sets = json.loads(run(tool + ["brackets", "--day", day, "--json"]))
-        got = [(s["names"], s["biases"], os.path.basename(s["output"]), s["done"]) for s in sets]
-        want = [(["DSC00100.ARW", "DSC00101.ARW", "DSC00102.ARW"], [0.0, -2.0, 2.0], "DSC00100-00102_HDR.jpg", False),
-                (["DSC00106.ARW", "DSC00107.ARW", "DSC00108.ARW"], [-3.0, 0.0, 3.0], "DSC00106-00108_HDR.jpg", False)]
-        if got != want:
+        make_bracket_day(os.path.join(root, "copy"))
+        sets = json.loads(run(tool + ["brackets", "--folder", root, "--json"]))
+        got = [(os.path.relpath(s["folder"], root), s["names"], s["biases"], os.path.basename(s["output"]), s["done"])
+               for s in sets]
+        one = ["DSC00100.ARW", "DSC00101.ARW", "DSC00102.ARW"], [0.0, -2.0, 2.0], "DSC00100-00102_HDR.jpg", False
+        two = ["DSC00106.ARW", "DSC00107.ARW", "DSC00108.ARW"], [-3.0, 0.0, 3.0], "DSC00106-00108_HDR.jpg", False
+        day_rel = os.path.join("2026", "01Mar26")
+        want = [(day_rel, *one), (day_rel, *two), ("copy", *one), ("copy", *two)]
+        if sorted(got) != sorted(want):
             sys.exit(f"FAIL: bracket sets: {got}")
         write(os.path.join(day, "HDR", "DSC00100-00102_HDR.jpg"), b"x")
-        if [s["done"] for s in json.loads(run(tool + ["brackets", "--day", day, "--json"]))] != [True, False]:
-            sys.exit("FAIL: a merged set isn't shown as merged")
+        done = {(os.path.relpath(s["folder"], root), s["names"][0]): s["done"]
+                for s in json.loads(run(tool + ["brackets", "--folder", root, "--json"]))}
+        if [k for k, v in done.items() if v] != [(day_rel, "DSC00100.ARW")]:
+            sys.exit(f"FAIL: a merged set isn't shown as merged: {done}")
 
         # Eject refuses anything that isn't a mounted drive (here: the fake card folder).
         out = run(tool + ["eject", "--card", card], expect=1)

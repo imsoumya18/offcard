@@ -65,7 +65,9 @@ class App:
         self.lock = threading.Lock()
         self.dest = E.load_config().get("dest")
         self.job = None          # {"kind", "state": running|done|error, "progress", "result", "error"}
-        self.hdr_job = None      # the same, for HDR merges, which run alongside the backup
+        self.hdr_job = None      # the same, for HDR Merge (scan or merge), which runs alongside a backup
+        self.hdr_folder = E.load_config().get("hdr_folder")
+        self.hdr_sets = None     # the last scan's bracket sets (engine.find_brackets)
         self.thumbs = {}         # path -> (mtime, data URI)
         self.plan = None         # last build_plan() result, used by "import"
         self.report = None       # last run_import() result, used by "trash"
@@ -105,11 +107,11 @@ class App:
         return {"started": kind}
 
 
-    def start_hdr(self, fn):
+    def start_hdr(self, kind, fn):
         with self.lock:
             if self.hdr_job and self.hdr_job["state"] == "running":
-                raise RuntimeError("An HDR merge is already running.")
-            self.hdr_job = {"kind": "hdr", "state": "running", "progress": None, "result": None, "error": None,
+                raise RuntimeError("HDR Merge is busy. Wait for it to finish.")
+            self.hdr_job = {"kind": kind, "state": "running", "progress": None, "result": None, "error": None,
                             "id": time.time()}
         job = self.hdr_job
 
@@ -122,7 +124,7 @@ class App:
                 job["state"] = "error"
 
         threading.Thread(target=run, daemon=True).start()
-        return {"started": "hdr"}
+        return {"started": kind}
 
 
 APP = App()
@@ -172,7 +174,7 @@ def report_summary(rep):
 
 # ---------------------------------------------------------------- folder picker
 
-def pick_folder(start=None):
+def pick_folder(start=None, title="Choose your backup folder"):
     """Native 'choose folder' dialog. Returns a path, or None if cancelled."""
     if WINDOW is not None:
         import webview
@@ -180,15 +182,15 @@ def pick_folder(start=None):
         return res[0] if res else None
     try:
         if E.IS_MAC:
-            r = subprocess.run(["osascript", "-e", 'POSIX path of (choose folder with prompt "Choose your backup folder")'],
+            r = subprocess.run(["osascript", "-e", f'POSIX path of (choose folder with prompt "{title}")'],
                                capture_output=True, text=True)
             return r.stdout.strip().rstrip("/") or None
         if E.IS_WIN:
             ps = ("Add-Type -AssemblyName System.Windows.Forms; $d = New-Object System.Windows.Forms.FolderBrowserDialog; "
-                  "$d.Description = 'Choose your backup folder'; if ($d.ShowDialog() -eq 'OK') { $d.SelectedPath }")
+                  f"$d.Description = '{title}'; if ($d.ShowDialog() -eq 'OK') {{ $d.SelectedPath }}")
             r = subprocess.run(["powershell", "-NoProfile", "-STA", "-Command", ps], capture_output=True, text=True)
             return r.stdout.strip() or None
-        for cmd in (["zenity", "--file-selection", "--directory", "--title=Choose your backup folder"],
+        for cmd in (["zenity", "--file-selection", "--directory", f"--title={title}"],
                     ["kdialog", "--getexistingdirectory", start or os.path.expanduser("~")]):
             if shutil.which(cmd[0]):
                 r = subprocess.run(cmd, capture_output=True, text=True)
@@ -211,7 +213,8 @@ def api_state(_):
         "dest": APP.dest, "dest_drive": info["dest_drive"],
         "dest_drive_connected": info["dest_drive_connected"], "dest_exists": info["dest_exists"],
         "free_bytes": E.free_bytes(APP.dest) if APP.dest and info["dest_drive_connected"] else None,
-        "job": APP.job, "hdr_job": APP.hdr_job, "hdr_missing": HDR_MISSING, "update": {"latest": newer, "line": E.INSTALL_LINE_WIN if E.IS_WIN else E.INSTALL_LINE}
+        "job": APP.job, "hdr_job": hdr_job_brief(), "hdr_missing": HDR_MISSING, "hdr_folder": APP.hdr_folder,
+        "hdr_folder_exists": bool(APP.hdr_folder and os.path.isdir(APP.hdr_folder)), "update": {"latest": newer, "line": E.INSTALL_LINE_WIN if E.IS_WIN else E.INSTALL_LINE}
                                   if newer else None,
         "can_pick": True,
     }
@@ -301,18 +304,7 @@ def api_trash(_):
     return {"moved": len(moved)}
 
 
-# ---------------------------------------------------------------- HDR
-
-def _hdr_day(body):
-    """The absolute day folder for a day the page picked, which must be one of the backup's days."""
-    if not APP.dest:
-        raise RuntimeError("Choose a backup folder first.")
-    days = dict(E.day_folders(APP.dest))
-    rel = body.get("day")
-    if rel not in days:
-        raise RuntimeError("That day isn't in the backup folder.")
-    return days[rel]
-
+# ---------------------------------------------------------------- HDR Merge
 
 def thumbnail(path, size=240):
     """Small JPEG data URI: the RAW's embedded preview, or the merged JPEG itself."""
@@ -324,10 +316,9 @@ def thumbnail(path, size=240):
     if path.upper().endswith(".ARW"):
         with rawpy.imread(path) as r:
             th = r.extract_thumb()
-        data = th.data if th.format == rawpy.ThumbFormat.JPEG else None
-        if data is None:
+        if th.format != rawpy.ThumbFormat.JPEG:
             return None
-        im = Image.open(io.BytesIO(data))
+        im = Image.open(io.BytesIO(th.data))
     else:
         im = Image.open(path)
     im.draft("RGB", (size, size))
@@ -340,48 +331,91 @@ def thumbnail(path, size=240):
     return uri
 
 
-def api_hdr_days(_):
-    if not APP.dest:
-        return {"days": []}
-    days = []
-    for rel, path in E.day_folders(APP.dest):
-        try:
-            if any(f.upper().endswith(".ARW") for f in os.listdir(path)):
-                days.append({"day": rel, "label": day_label(rel)})
-        except OSError:
-            pass
-    return {"days": days}
+def set_thumb(st):
+    if HDR is None:
+        return None
+    mid = min(range(len(st["files"])), key=lambda k: abs(st["biases"][k]))
+    try:
+        return thumbnail(st["output"] if st["done"] else st["files"][mid])
+    except Exception:
+        return None
 
 
-def api_hdr_scan(body):
-    folder = _hdr_day(body)
-    sets = E.find_brackets(folder)
-    out = []
-    for i, st in enumerate(sets):
-        mid = min(range(len(st["files"])), key=lambda k: abs(st["biases"][k]))
-        try:
-            thumb = thumbnail(st["output"] if st["done"] else st["files"][mid]) if HDR else None
-        except Exception:
-            thumb = None
-        out.append({"id": i, "names": st["names"], "biases": st["biases"], "time": st["taken"][11:16],
-                    "output": os.path.basename(st["output"]), "done": st["done"], "thumb": thumb})
-    return {"day": body.get("day"), "sets": out}
+def set_summary(i, st):
+    rel = os.path.relpath(st["folder"], APP.hdr_folder)
+    d = datetime.datetime.strptime(st["taken"][:19], "%Y:%m:%d %H:%M:%S")
+    return {"id": i, "folder": "" if rel == "." else rel, "names": st["names"], "biases": st["biases"],
+            "date": f"{d.day} {d:%b %Y}", "time": f"{d:%H:%M}", "output": os.path.basename(st["output"]),
+            "done": st["done"], "thumb": st.get("thumb")}
+
+
+def hdr_job_brief():
+    """The HDR job for /api/state, without the sets and previews (the page gets those once from
+    /api/hdr/sets), so polling stays small."""
+    j = APP.hdr_job
+    if not j:
+        return None
+    brief = {k: v for k, v in j.items() if k != "result"}
+    r = j["result"] or {}
+    brief["result"] = {"sets": len(r.get("sets", [])), "merged": len(r.get("merged", [])),
+                       "failed": r.get("failed", [])} if j["result"] is not None else None
+    return brief
+
+
+def api_hdr_sets(_):
+    return {"folder": APP.hdr_folder,
+            "sets": None if APP.hdr_sets is None else [set_summary(i, st) for i, st in enumerate(APP.hdr_sets)]}
+
+
+def api_hdr_folder(body):
+    path = E.clean_path(body.get("path") or "")
+    if not path:
+        raise RuntimeError("Choose a folder first.")
+    if not os.path.isdir(path):
+        raise RuntimeError("That folder doesn't exist.")
+    if E.card_root(path):
+        raise RuntimeError("That folder is on a memory card, and ShotLoft never writes to a card. "
+                           "Back the card up first (Card Backup), then merge from the backup.")
+    APP.hdr_folder, APP.hdr_sets = path, None
+    E.save_config({**E.load_config(), "hdr_folder": path})
+    return {"hdr_folder": path}
+
+
+def api_hdr_pick(_):
+    path = pick_folder(APP.hdr_folder or APP.dest, "Choose a folder with bracketed shots")
+    return api_hdr_folder({"path": path}) if path else {"hdr_folder": APP.hdr_folder, "cancelled": True}
+
+
+def api_hdr_scan(_):
+    folder = APP.hdr_folder
+    if not folder or not os.path.isdir(folder):
+        raise RuntimeError("Choose a folder first.")
+
+    def run(job):
+        def prog(done, total):
+            job["progress"] = {"done": done, "total": total, "stage": "Reading photos"}
+        sets = E.find_brackets(folder, prog)
+        for n, st in enumerate(sets):
+            job["progress"] = {"done": n, "total": len(sets), "stage": "Making previews"}
+            st["thumb"] = set_thumb(st)
+        APP.hdr_sets = sets
+        return {"sets": sets}
+    return APP.start_hdr("scan", run)
 
 
 def api_hdr_merge(body):
     if HDR is None:
         raise RuntimeError(HDR_MISSING)
-    folder = _hdr_day(body)
-    sets = E.find_brackets(folder)
+    sets = APP.hdr_sets or []
     ids = body.get("ids") or []
-    chosen = [sets[i] for i in ids if isinstance(i, int) and 0 <= i < len(sets)]
+    chosen = [(i, sets[i]) for i in ids if isinstance(i, int) and 0 <= i < len(sets)]
     if not chosen:
         raise RuntimeError("Choose at least one set to merge.")
     tiff = bool(body.get("tiff"))
 
     def run(job):
         done, failed = [], []
-        for n, st in enumerate(chosen):
+        for n, (i, st) in enumerate(chosen):
             name = os.path.basename(st["output"])
 
             def prog(frac, stage, n=n, name=name):
@@ -389,18 +423,24 @@ def api_hdr_merge(body):
             prog(0, "Reading")
             try:
                 HDR.merge_set(st["files"], st["output"], tiff=tiff, progress=prog)
-                done.append(name)
+                st["done"] = True
+                st["thumb"] = set_thumb(st)
+                done.append(i)
             except Exception as e:
                 failed.append({"file": name, "error": str(e)})
-        return {"merged": done, "failed": failed, "folder": os.path.join(folder, E.HDR_DIR), "day": body.get("day")}
-    return APP.start_hdr(run)
+        return {"merged": done, "failed": failed, "sets": sets}
+    return APP.start_hdr("merge", run)
 
 
 def api_reveal(body):
-    """Open the day's HDR folder in Finder / File Explorer / the file manager."""
-    path = os.path.join(_hdr_day(body), E.HDR_DIR)
+    """Open a merged set's HDR folder in Finder / File Explorer / the file manager."""
+    sets = APP.hdr_sets or []
+    i = body.get("id")
+    if not isinstance(i, int) or not 0 <= i < len(sets):
+        raise RuntimeError("Choose a set first.")
+    path = os.path.dirname(sets[i]["output"])
     if not os.path.isdir(path):
-        raise RuntimeError("There's no HDR folder for that day yet.")
+        raise RuntimeError("That set hasn't been merged yet.")
     if E.IS_MAC:
         subprocess.Popen(["open", path])
     elif E.IS_WIN:
@@ -420,8 +460,10 @@ def api_reset(_):
 
 ROUTES = {"/api/state": api_state, "/api/dest": api_set_dest, "/api/pick": api_pick, "/api/plan": api_plan,
           "/api/import": api_import, "/api/verify": api_verify, "/api/eject": api_eject,
-          "/api/trash": api_trash, "/api/reset": api_reset, "/api/hdr/days": api_hdr_days,
-          "/api/hdr/scan": api_hdr_scan, "/api/hdr/merge": api_hdr_merge, "/api/reveal": api_reveal}
+          "/api/trash": api_trash, "/api/reset": api_reset, "/api/hdr/folder": api_hdr_folder,
+          "/api/hdr/pick": api_hdr_pick, "/api/hdr/scan": api_hdr_scan, "/api/hdr/merge": api_hdr_merge,
+          "/api/hdr/sets": api_hdr_sets,
+          "/api/reveal": api_reveal}
 
 
 class Handler(http.server.BaseHTTPRequestHandler):

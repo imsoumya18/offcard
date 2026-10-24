@@ -83,21 +83,25 @@ def main():
             again = wait("plan")
             assert again["new_files"] == 0 and again["already_photos"] == 5, again
 
-            # HDR: the day with bracket sets is listed and scanned; a merge of fake RAW files fails
-            # cleanly, set by set, and only days inside the backup folder are accepted.
+            # HDR Merge: a folder is searched with its subfolders in the background, a folder on
+            # a memory card is refused, and a merge of fake RAW files fails cleanly, set by set.
             make_bracket_day(os.path.join(dest, "2026", "3. March", "01Mar26"))
-            st, days = call("/api/hdr/days")
-            assert days["days"][0]["day"] == os.path.join("2026", "3. March", "01Mar26"), days
-            assert days["days"][0]["label"] == "1 Mar 2026", days
-            st, scan = call("/api/hdr/scan", {"day": days["days"][0]["day"]})
-            assert st == 200 and [len(x["names"]) for x in scan["sets"]] == [3, 3], scan
-            assert call("/api/hdr/scan", {"day": "../../etc"})[0] == 400, "day outside the backup"
+            assert call("/api/hdr/folder", {"path": card})[0] == 400, "a folder on a card must be refused"
+            st, r = call("/api/hdr/folder", {"path": dest})
+            assert st == 200, r
             st, s = call("/api/state")
             assert s["hdr_missing"] is None, s["hdr_missing"]
-            st, r = call("/api/hdr/merge", {"day": days["days"][0]["day"], "ids": [0], "tiff": False})
+            assert s["hdr_folder"] == dest and s["hdr_folder_exists"], s
+            call("/api/hdr/scan", {})
+            scan = wait("scan", key="hdr_job")
+            assert scan["sets"] == 2, scan
+            st, sets = call("/api/hdr/sets")
+            assert [x["folder"] for x in sets["sets"]] == [os.path.join("2026", "3. March", "01Mar26")] * 2, sets
+            assert [len(x["names"]) for x in sets["sets"]] == [3, 3] and not any(x["done"] for x in sets["sets"]), sets
+            st, r = call("/api/hdr/merge", {"ids": [0], "tiff": False})
             assert st == 200, r
-            res = wait("hdr", key="hdr_job")
-            assert res["merged"] == [] and len(res["failed"]) == 1, res
+            res = wait("merge", key="hdr_job")
+            assert res["merged"] == 0 and len(res["failed"]) == 1, res
         finally:
             proc.terminate()
             try:
