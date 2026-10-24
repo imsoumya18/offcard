@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sony Import</title>
+<link rel="icon" href="/icon.png">
+<style>
+  :root {
+    --bg: #f4f4f2; --panel: #ffffff; --soft: #f0f0ee; --line: rgba(0,0,0,.12); --text: #1c1c1c;
+    --muted: #6b6b6b; --accent: #008787; --accent-soft: #e3f3f3; --attn: #c25500; --good: #1f7a1f;
+    --good-soft: #e7f4e7; --bad: #c03c3c; --bad-soft: #fbeaea; --on-accent: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161617; --panel: #1f1f21; --soft: #2a2a2d; --line: rgba(255,255,255,.12); --text: #ececec;
+      --muted: #a0a0a0; --accent: #1aa3a3; --accent-soft: #123536; --attn: #f08a3c; --good: #4cbb4c;
+      --good-soft: #17301a; --bad: #ef7676; --bad-soft: #3a1d1d; --on-accent: #ffffff;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 22px 22px 32px; }
+  header { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+  header img { width: 30px; height: 30px; }
+  header h1 { font-size: 18px; font-weight: 600; margin: 0; flex: 1; }
+  header .ver { font-size: 12px; color: var(--muted); }
+  .grid2 { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 12px; margin-bottom: 16px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin: 0 0 16px; }
+  .box { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 13px 15px; min-height: 96px; }
+  .box.drop { border: 1.5px dashed var(--accent); }
+  .lbl { font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .big { font-size: 16px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sub { font-size: 12.5px; color: var(--muted); }
+  .metric { background: var(--soft); border-radius: 10px; padding: 10px 12px; }
+  .metric .n { font-size: 20px; font-weight: 600; }
+  .attn { color: var(--attn); } .good { color: var(--good); } .bad { color: var(--bad); }
+  button { font: inherit; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: 7px 12px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.link { border: 0; background: none; color: var(--accent); padding: 0; font-size: 12.5px; }
+  button.primary { width: 100%; height: 46px; background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-size: 16px; font-weight: 600; }
+  button.primary:hover { filter: brightness(1.08); }
+  .actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; margin-top: 12px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .bar { height: 9px; border-radius: 5px; background: var(--soft); overflow: hidden; margin: 6px 0 4px; }
+  .bar > div { height: 100%; background: var(--accent); width: 0; transition: width .3s; }
+  .row { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--muted); }
+  .msg { border-radius: 10px; padding: 11px 13px; margin-bottom: 12px; font-size: 14px; }
+  .msg.good { background: var(--good-soft); } .msg.bad { background: var(--bad-soft); } .msg.info { background: var(--accent-soft); color: var(--text); }
+  .msg b { font-weight: 600; }
+  input[type=text] { width: 100%; font: inherit; font-size: 13px; padding: 6px 9px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); margin-top: 6px; }
+  ul.files { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
+  .days { font-size: 13px; color: var(--muted); margin: -6px 0 14px; }
+  .wait { color: var(--muted); font-size: 14px; }
+  code { font-size: 12px; background: var(--soft); padding: 2px 5px; border-radius: 5px; word-break: break-all; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="/icon.png" alt="">
+    <h1>Sony Import</h1>
+    <span class="ver" id="ver"></span>
+  </header>
+  <div id="update"></div>
+  <div class="grid2">
+    <div class="box" id="card"></div>
+    <div class="box" id="folder"></div>
+  </div>
+  <div id="flash"></div>
+  <div id="main"></div>
+</main>
+<script>
+const TOKEN = "__TOKEN__";
+let S = null, planKey = null, flash = null, busy = false;
+
+async function api(path, body) {
+  const r = await fetch(path, { method: body === undefined ? "GET" : "POST", headers: { "X-Token": TOKEN, "Content-Type": "application/json" },
+                                body: body === undefined ? undefined : JSON.stringify(body) });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || "Something went wrong.");
+  return j;
+}
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function human(n) { const u = ["B","KB","MB","GB","TB"]; let i = 0; while (n >= 1024 && i < 4) { n /= 1024; i++; } return (i ? n.toFixed(1) : n) + " " + u[i]; }
+function plural(n, w) { return `${n.toLocaleString()} ${w}${n === 1 ? "" : "s"}`; }
+function counts(p, v, x) { return [p ? plural(p, "photo") : "", v ? plural(v, "video") : "", x ? plural(x, "video info file") : ""].filter(Boolean).join(", ") || "nothing"; }
+function sentence(p, v, x) { return counts(p, v, x).replace(/, ([^,]*)$/, " and $1"); }
+const cardName = path => path.split(/[\\/]/).filter(Boolean).pop() || path;
+function secs(s) { s = Math.round(s); return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`; }
+function shortPath(p) { const parts = p.split(/[\\/]/).filter(Boolean); return parts.length > 2 ? "… / " + parts.slice(-2).join(" / ") : p; }
+function put(id, html, cls) {
+  const el = document.getElementById(id);
+  if (cls !== undefined && el.className !== cls) el.className = cls;
+  if (el._html !== html) { el._html = html; el.innerHTML = html; return true; }
+  return false;
+}
+function setFlash(kind, html) { flash = { kind, html, t: Date.now() }; render(); }
+
+async function act(fn) {
+  if (busy) return; busy = true;
+  try { await fn(); } catch (e) { setFlash("bad", esc(e.message)); }
+  busy = false; await refresh();
+}
+const pick = () => act(() => api("/api/pick", {}));
+const setDest = path => act(() => api("/api/dest", { path }));
+const backup = () => act(() => api("/api/import", {}));
+const verify = () => act(() => api("/api/verify", {}));
+const retry = () => act(async () => { await api("/api/reset", {}); planKey = null; });
+async function eject() {
+  await act(async () => {
+    const r = await api("/api/eject", {});
+    const ok = r.results.filter(x => x.ejected), bad = r.results.filter(x => !x.ejected);
+    if (ok.length) setFlash("good", `<b>Ejected ${esc(ok.map(x => cardName(x.card)).join(", "))}.</b> You can take the card out now.`);
+    if (bad.length) setFlash("bad", `Couldn't eject ${esc(cardName(bad[0].card))}. Please eject it from ${esc(S.file_manager)}. <span class="sub">(${esc(bad[0].details)})</span>`);
+  });
+}
+async function trash() {
+  await act(async () => {
+    const r = await api("/api/trash", {});
+    setFlash("good", `Moved ${plural(r.moved, "JPG")} to the ${esc(S.trash_name)}. You can restore them from there.`);
+  });
+}
+
+function bar(p, title) {
+  if (!p) return `<div class="panel"><div class="row"><span>${esc(title)}…</span></div><div class="bar"><div></div></div></div>`;
+  const frac = Math.min(p.done / Math.max(p.total, 1), 1), pct = Math.floor(frac * 100);
+  let detail = p.bytes ? `${p.files_done} of ${p.files_total} files · ${human(p.done)} of ${human(p.total)}` : `${p.done} of ${p.total} files`;
+  if (p.bytes && p.elapsed > 2 && p.done && p.done < p.total) detail += ` · ${secs((p.total - p.done) / (p.done / p.elapsed))} left`;
+  return `<div class="panel"><div class="row"><span><b style="color:var(--text)">${esc(title)}</b></span><span>${pct}%</span></div>
+          <div class="bar"><div style="width:${pct}%"></div></div><div class="row"><span>${detail}</span></div></div>`;
+}
+function afterActions(extra) {
+  return `<div class="actions">
+    <button onclick="verify()">Check it's safe to format</button>
+    <button onclick="eject()">Eject card</button>${extra || ""}</div>`;
+}
+
+function renderCard() {
+  if (!S.cards.length)
+    return put("card", `<div class="lbl">Memory card</div><div class="big wait">Put in a memory card</div><div class="sub">It shows up here by itself.</div>`, "box");
+  put("card", S.cards.map(c => `<div class="lbl">Memory card</div><div class="big">${esc(c.name)}</div>
+      <div class="sub">${counts(c.photos, c.videos)}</div>`).join(`<div style="height:8px"></div>`), "box");
+}
+function renderFolder() {
+  if (!S.dest) {
+    if (put("folder", `<div class="lbl">Backup folder</div><button onclick="pick()">Choose backup folder</button>
+      <input type="text" id="typed" placeholder="or paste a folder path and press Enter">`, "box drop")) {
+      const inp = document.getElementById("typed");
+      inp.onkeydown = e => { if (e.key === "Enter" && inp.value.trim()) setDest(inp.value.trim()); };
+    }
+    return;
+  }
+  let status = S.free_bytes != null ? `${human(S.free_bytes)} free` : "";
+  if (!S.dest_drive_connected) status = `<span class="bad">Drive ${esc(S.dest_drive)} isn't connected</span>`;
+  else if (!S.dest_exists) status += ` · <span class="attn">will be created</span>`;
+  put("folder", `<div class="lbl"><span>Backup folder</span><button class="link" onclick="pick()">Change</button></div>
+    <div class="big" title="${esc(S.dest)}">${esc(shortPath(S.dest))}</div><div class="sub">${status}</div>`, "box");
+}
+
+function renderMain() { put("main", mainHtml()); }
+function mainHtml() {
+  const j = S.job;
+  const ready = S.cards.length && S.dest && S.dest_drive_connected;
+  const key = JSON.stringify([S.cards.map(c => c.path), S.dest]);
+  if (!ready) { return `<p class="wait">${!S.cards.length ? "Waiting for a memory card…" : !S.dest ? "Choose where your backup should go." : "Waiting for the backup drive…"}</p>`; return; }
+  if (key !== planKey && (!j || j.state !== "running")) {
+    planKey = key;
+    api("/api/plan", {}).then(refresh).catch(e => setFlash("bad", esc(e.message)));
+    return bar(null, "Checking what's new");
+  }
+  if (!j) return bar(null, "Checking what's new");
+  if (j.state === "error") return `<div class="msg bad">${esc(j.error)}</div><button onclick="retry()">Try again</button>`;
+  if (j.state === "running") {
+    const title = j.kind === "plan" ? "Checking what's new" : j.kind === "import" ? "Copying" :
+                  (j.progress && j.progress.label === "Verifying" ? "Checking every file, byte by byte" : "Getting ready to check every file");
+    return bar(j.progress, title);
+  }
+  const r = j.result;
+  if (j.kind === "plan") {
+    const newMain = !r.new_files ? "Nothing" : r.new_photos ? plural(r.new_photos, "photo") : r.new_videos ? plural(r.new_videos, "video") : plural(r.new_xml, "video info file");
+    const oldMain = r.already_photos ? plural(r.already_photos, "photo") : r.already_videos ? plural(r.already_videos, "video") : "None yet";
+    const daysTxt = r.days.length ? r.days.map(d => d.label.replace(/ \d{4}$/, "")).join(", ") : "";
+    let html = `<div class="grid3">
+      <div class="metric"><div class="sub">New</div><div class="n ${r.new_files ? "attn" : "good"}">${newMain}</div>
+        <div class="sub">${r.new_files ? (r.new_photos && r.new_videos ? plural(r.new_videos, "video") + " · " : "") + human(r.needed_bytes) : "all backed up"}</div></div>
+      <div class="metric"><div class="sub">Already backed up</div><div class="n good">${oldMain}</div>
+        <div class="sub">${r.already_photos && r.already_videos ? plural(r.already_videos, "video") : "&nbsp;"}</div></div>
+      <div class="metric"><div class="sub">Goes into</div><div class="n">${r.days.length ? plural(r.days.length, "day") : "—"}</div>
+        <div class="sub" title="${esc(daysTxt)}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(daysTxt) || "&nbsp;"}</div></div></div>`;
+    if (r.repairs) html += `<p class="days">Includes ${plural(r.repairs, "file")} missing from an earlier backup; they go back next to their partner.</p>`;
+    if (!r.new_files) html += `<div class="msg good"><b>Everything on the card is already backed up.</b></div>` + afterActions();
+    else if (!r.enough_space) html += `<div class="msg bad"><b>Not enough space.</b> ${human(r.needed_bytes)} needed, but only ${human(r.free_bytes)} is free on the backup drive. Free up some space or choose another folder.</div>`;
+    else html += `<button class="primary" onclick="backup()">Back up ${sentence(r.new_photos, r.new_videos, r.new_xml)}</button>`;
+    return html;
+  }
+  if (j.kind === "import") {
+    let html = `<div class="msg ${r.errors.length ? "bad" : "good"}"><b>${r.errors.length ? "Some files weren't copied." : "Done:"}</b> ${sentence(r.photos, r.videos, r.xml)} backed up${r.seconds >= 1 ? " in " + secs(r.seconds) : ""}.</div>`;
+    if (r.errors.length) html += `<ul class="files">${r.errors.slice(0, 10).map(e => `<li>${esc(e.file)} <span class="sub">${esc(e.error)}</span></li>`).join("")}</ul><button onclick="retry()">Try again</button>`;
+    const extra = r.raw_jpg_pairs ? `<button onclick="trash()">Move ${plural(r.raw_jpg_pairs, "extra JPG")} to the ${esc(S.trash_name)}</button>` : "";
+    if (r.raw_jpg_pairs) html += `<p class="days">${plural(r.raw_jpg_pairs, "photo")} ${r.raw_jpg_pairs === 1 ? "was" : "were"} shot as RAW + JPG, so the JPG is an extra copy.</p>`;
+    return html + afterActions(extra);
+  }
+  if (j.kind === "verify") {
+    let html = "";
+    for (const c of r.cards) {
+      const probs = c.missing.map(f => [f, "not in the backup"]).concat(c.different.map(f => [f, "backup copy is different"]));
+      if (!probs.length) html += `<div class="msg good"><b>All ${c.files.toLocaleString()} files are safely backed up, byte for byte.</b><br>You can format this card in your camera.</div>`;
+      else html += `<div class="msg bad"><b>${plural(probs.length, "file")} not safely backed up. Don't format this card yet.</b>
+        <ul class="files">${probs.slice(0, 15).map(p => `<li>${esc(p[0])} <span class="sub">${esc(p[1])}</span></li>`).join("")}</ul>Back up again, then check again.</div>`;
+      if (c.trashed_jpg) html += `<p class="days">${plural(c.trashed_jpg, "JPG")} you moved to the ${esc(S.trash_name)} ${c.trashed_jpg === 1 ? "isn't" : "aren't"} in the backup; the RAW files are safe.</p>`;
+    }
+    return html + `<div class="actions"><button onclick="eject()">Eject card</button></div>`;
+  }
+  return "";
+}
+
+function render() {
+  if (!S) return;
+  document.getElementById("ver").textContent = "v" + S.version;
+  document.getElementById("update").innerHTML = S.update ? `<div class="msg info"><b>A new version is available: v${esc(S.update.latest)}.</b> To update, run this line in ${navigator.platform.startsWith("Win") ? "PowerShell" : "Terminal"}:<br><code>${esc(S.update.line)}</code></div>` : "";
+  document.getElementById("flash").innerHTML = flash && Date.now() - flash.t < 15000 ? `<div class="msg ${flash.kind}">${flash.html}</div>` : "";
+  renderCard(); renderFolder(); renderMain();
+}
+async function refresh() { try { S = await api("/api/state"); render(); } catch (e) {} }
+async function loop() { await refresh(); setTimeout(loop, S && S.job && S.job.state === "running" ? 500 : 1500); }
+loop();
+</script>
+</body>
+</html>
