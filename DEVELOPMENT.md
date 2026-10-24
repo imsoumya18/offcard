@@ -1,23 +1,23 @@
-# Developing Sony Import
+# Developing ShotLoft
 
-[![Build](https://img.shields.io/github/actions/workflow/status/imsoumya18/sony-import/build.yml?branch=main&label=build)](https://github.com/imsoumya18/sony-import/actions/workflows/build.yml)
+[![Build](https://img.shields.io/github/actions/workflow/status/imsoumya18/shotloft/build.yml?branch=main&label=build)](https://github.com/imsoumya18/shotloft/actions/workflows/build.yml)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-008787)](https://www.python.org/)
 
-Sony Import is a desktop app made of three parts. User-facing docs are in the [README](README.md).
+ShotLoft is a desktop app made of three parts. User-facing docs are in the [README](README.md).
 
 | Part | What it is |
 |---|---|
-| [`sony-import-app.py`](sony-import-app.py) | The app: opens the window and serves the page and its actions |
+| [`shotloft.py`](shotloft.py) | The app: opens the window and serves the page and its actions |
 | [`ui/index.html`](ui/index.html) | The window's contents: one page of HTML, CSS and JavaScript |
-| [`sony-import.py`](sony-import.py) | The engine: card detection, matching, copying, repairs, verify, eject. Standard library only, Python 3.8+ |
+| [`engine.py`](engine.py) | The engine: card detection, matching, copying, repairs, verify, eject. Standard library only, Python 3.8+ |
 
 ## Run from source
 
 ```bash
 pip install pywebview                 # once, for the native window (Mac and Windows)
-python3 sony-import-app.py            # open the app
-python3 sony-import-app.py --browser  # open it in the browser instead
-python3 sony-import-app.py --serve    # no window; print the URL and token (tests)
+python3 shotloft.py            # open the app
+python3 shotloft.py --browser  # open it in the browser instead
+python3 shotloft.py --serve    # no window; print the URL and token (tests)
 ```
 
 ## How the app works
@@ -35,7 +35,7 @@ python3 sony-import-app.py --serve    # no window; print the URL and token (test
   and quits about 45 seconds after the page is closed.
 - **Folder picker.** A native dialog everywhere: pywebview's in the window, otherwise AppleScript,
   PowerShell, `zenity` or `kdialog`. You can also paste a path.
-- **Engine loading.** The app loads `sony-import.py` at start-up. Because of that, the app imports
+- **Engine loading.** The app loads `engine.py` at start-up. Because of that, the app imports
   the engine's standard-library modules itself, so PyInstaller packs them into the built app.
 - **macOS builds** add `NSAppTransportSecurity → NSAllowsLocalNetworking` to `Info.plist` and are
   re-signed ad hoc. Without it, the window can't load the app's own `http://127.0.0.1` page; the
@@ -95,8 +95,8 @@ python3 sony-import-app.py --serve    # no window; print the URL and token (test
   release, with a 3-second timeout.
   - It falls back to `curl` if Python can't verify HTTPS, and says nothing when offline.
   - If the release is newer than `__version__`, the app shows a banner with the update line.
-  - Turn it off with `SONY_IMPORT_NO_UPDATE_CHECK=1`.
-- **Saved settings.** The backup folder is remembered in `~/.sony-import.json`.
+  - Turn it off with `SHOTLOFT_NO_UPDATE_CHECK=1`.
+- **Saved settings.** The backup folder is remembered in `~/.shotloft.json`.
 
 ### Engine commands (internal)
 
@@ -104,18 +104,18 @@ The engine also has commands with JSON output. They're used by the tests and by 
 a Claude skill that runs backups), and aren't part of the user-facing app:
 
 ```bash
-python3 sony-import.py detect --dest "$DEST" --json           # cards, backup drive
-python3 sony-import.py plan   --dest "$DEST" --json           # what would be copied
-python3 sony-import.py import --dest "$DEST" --report r.json  # copy, write a JSON report
-python3 sony-import.py verify --dest "$DEST" --json           # byte-for-byte check
-python3 sony-import.py eject  [--card PATH]                   # safely eject the card(s)
-python3 sony-import.py check-update --json                    # is a newer release out?
-python3 sony-import.py trash-jpgs --report r.json             # move extra JPGs to the Trash
+python3 engine.py detect --dest "$DEST" --json           # cards, backup drive
+python3 engine.py plan   --dest "$DEST" --json           # what would be copied
+python3 engine.py import --dest "$DEST" --report r.json  # copy, write a JSON report
+python3 engine.py verify --dest "$DEST" --json           # byte-for-byte check
+python3 engine.py eject  [--card PATH]                   # safely eject the card(s)
+python3 engine.py check-update --json                    # is a newer release out?
+python3 engine.py trash-jpgs --report r.json             # move extra JPGs to the Trash
 ```
 
 - **Cards:** `--card PATH` (repeatable) picks specific cards. Otherwise every connected Sony card
   is used.
-- **Backup folder:** `--dest` can come from the `SONY_IMPORT_DEST` environment variable instead.
+- **Backup folder:** `--dest` can come from the `SHOTLOFT_DEST` environment variable instead.
 - **Exit codes:**
 
   | Code | Meaning |
@@ -145,19 +145,35 @@ python3 sony-import.py trash-jpgs --report r.json             # move extra JPGs 
   - requests with no token, a wrong token, or a foreign Host header are refused
 
 ```bash
-python3 tests/smoke_test.py python3 sony-import.py      # the engine
-python3 tests/app_test.py python3 sony-import-app.py    # the app, from source
-python3 tests/app_test.py "dist/Sony Import.app/Contents/MacOS/Sony Import"   # a built Mac app
+python3 tests/smoke_test.py python3 engine.py      # the engine
+python3 tests/app_test.py python3 shotloft.py    # the app, from source
+python3 tests/app_test.py "dist/ShotLoft.app/Contents/MacOS/ShotLoft"   # a built Mac app
 ```
 
 Test hooks:
 
 | Variable | What it does |
 |---|---|
-| `SONY_IMPORT_TEST_CARDS` | Treats these folders as plugged-in cards |
-| `SONY_IMPORT_TEST_FREE_BYTES` | Fakes the free space on the backup drive |
-| `SONY_IMPORT_UPDATE_URL` | Uses this URL for the update check |
-| `SONY_IMPORT_URL_FILE` | Writes the `--serve` URL to a file, for windowed builds without a console |
+| `SHOTLOFT_TEST_CARDS` | Treats these folders as plugged-in cards |
+| `SHOTLOFT_TEST_FREE_BYTES` | Fakes the free space on the backup drive |
+| `SHOTLOFT_UPDATE_URL` | Uses this URL for the update check |
+| `SHOTLOFT_URL_FILE` | Writes the `--serve` URL to a file, for windowed builds without a console |
+
+## Former name (Sony Import)
+
+ShotLoft was called **Sony Import** up to v2.0.0. The old name appears in the code in exactly three
+places, all for moving existing users over:
+- **Settings** (`engine.py`): if `~/.shotloft.json` doesn't exist yet, `~/.sony-import.json` is
+  read once, so the saved backup folder carries over.
+- **Installers:**
+  - Until the first ShotLoft release exists, they fall back to the last `sony-import-*` release
+    files.
+  - After installing ShotLoft, they remove the old Sony Import app, but only if it's ours:
+    - Mac: checked by its bundle ID `io.github.imsoumya18.sony-import`.
+    - Windows: its own `Programs\Sony Import` folder and Start-menu entry.
+    - Linux: its menu entry.
+- GitHub redirects the old repo address (`imsoumya18/sony-import`) and old install lines to
+  `imsoumya18/shotloft`.
 
 ## The one-line installers
 
@@ -169,29 +185,29 @@ it.
 ### macOS and Linux: [`install.sh`](install.sh)
 
 It downloads the latest release with `curl`:
-- **macOS:** unpacks `Sony Import.app` with `ditto`, keeping its signature. It installs into
+- **macOS:** unpacks `ShotLoft.app` with `ditto`, keeping its signature. It installs into
   `/Applications`, or into `~/Applications` if that isn't writable, replacing an older version. It
   refuses while the app is open.
-- **Linux:** installs `~/.local/bin/sony-import` (it opens in the browser) and an app-menu entry.
+- **Linux:** installs `~/.local/bin/shotloft` (it opens in the browser) and an app-menu entry.
 
 | Variable | Default |
 |---|---|
-| `SONY_IMPORT_RELEASES` | `https://github.com/imsoumya18/sony-import/releases/latest/download` |
-| `SONY_IMPORT_RAW` | `https://raw.githubusercontent.com/imsoumya18/sony-import/main` (Linux icon) |
-| `SONY_IMPORT_APPS_DIR` | `/Applications` (macOS) |
-| `SONY_IMPORT_BIN_DIR` | `~/.local/bin` (Linux) |
-| `SONY_IMPORT_NO_REVEAL` | If unset, the app is shown in Finder afterwards |
+| `SHOTLOFT_RELEASES` | `https://github.com/imsoumya18/shotloft/releases/latest/download` |
+| `SHOTLOFT_RAW` | `https://raw.githubusercontent.com/imsoumya18/shotloft/main` (Linux icon) |
+| `SHOTLOFT_APPS_DIR` | `/Applications` (macOS) |
+| `SHOTLOFT_BIN_DIR` | `~/.local/bin` (Linux) |
+| `SHOTLOFT_NO_REVEAL` | If unset, the app is shown in Finder afterwards |
 
 ### Windows: [`install.ps1`](install.ps1)
 
 It runs as `irm …/install.ps1 | iex`, in Windows PowerShell 5.1 or later:
-- It downloads `Sony Import.exe` into `%LOCALAPPDATA%\Programs\Sony Import`, which needs no admin
-  rights, and adds a **Sony Import** Start-menu shortcut.
+- It downloads `ShotLoft.exe` into `%LOCALAPPDATA%\Programs\ShotLoft`, which needs no admin
+  rights, and adds a **ShotLoft** Start-menu shortcut.
 - `Unblock-File` makes sure the app carries no "from the internet" mark.
 - It runs inside `& { … }` and never calls `exit`, so a failure can't close the user's PowerShell
   window.
 
-Overrides: `SONY_IMPORT_RELEASES`, `SONY_IMPORT_INSTALL_DIR` and `SONY_IMPORT_START_MENU`.
+Overrides: `SHOTLOFT_RELEASES`, `SHOTLOFT_INSTALL_DIR` and `SHOTLOFT_START_MENU`.
 
 The icons are [`docs/icon.png`](docs/icon.png) (1024 px), [`docs/AppIcon.icns`](docs/AppIcon.icns)
 and [`docs/icon.ico`](docs/icon.ico), drawn in the app's teal and orange.
@@ -210,7 +226,7 @@ On every push, [GitHub Actions](.github/workflows/build.yml) runs these jobs:
 To publish a new version:
 1. Add a `## [X.Y.Z] - date` section to [CHANGELOG.md](CHANGELOG.md), written for users. Usually
    you just rename `## [Unreleased]`.
-2. Bump `__version__` in `sony-import.py`. The app shows it, and the update notice uses it.
+2. Bump `__version__` in `engine.py`. The app shows it, and the update notice uses it.
 3. Commit, then tag and push:
 
    ```bash

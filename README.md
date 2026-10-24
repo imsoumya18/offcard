@@ -1,16 +1,18 @@
-# Sony Import
+# ShotLoft
 
-[![Latest version](https://img.shields.io/github/v/release/imsoumya18/sony-import?label=version&color=008787)](https://github.com/imsoumya18/sony-import/releases/latest)
-[![Build](https://img.shields.io/github/actions/workflow/status/imsoumya18/sony-import/build.yml?branch=main&label=build)](https://github.com/imsoumya18/sony-import/actions/workflows/build.yml)
-[![Downloads](https://img.shields.io/github/downloads/imsoumya18/sony-import/total)](https://github.com/imsoumya18/sony-import/releases)
+[![Latest version](https://img.shields.io/github/v/release/imsoumya18/shotloft?label=version&color=008787)](https://github.com/imsoumya18/shotloft/releases/latest)
+[![Build](https://img.shields.io/github/actions/workflow/status/imsoumya18/shotloft/build.yml?branch=main&label=build)](https://github.com/imsoumya18/shotloft/actions/workflows/build.yml)
+[![Downloads](https://img.shields.io/github/downloads/imsoumya18/shotloft/total)](https://github.com/imsoumya18/shotloft/releases)
 [![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-008787)](#install)
 [![Setup](https://img.shields.io/badge/setup-one%20line-008787)](#install)
-[![License: MIT](https://img.shields.io/github/license/imsoumya18/sony-import?color=008787)](LICENSE)
+[![License: MIT](https://img.shields.io/github/license/imsoumya18/shotloft?color=008787)](LICENSE)
 
 A simple app that backs up the photos and videos from your Sony camera's memory card, neatly
 sorted into **Year → Month → Day** folders. Open it any time: it only copies what's new.
 
-<p align="center"><img src="docs/screenshot.png" alt="The Sony Import app showing a memory card, the backup folder, and what will be backed up" width="720"></p>
+<sub>ShotLoft was called *Sony Import* up to v2.0.0. Already using it? Run the install line below once to switch.</sub>
+
+<p align="center"><img src="docs/screenshot.png" alt="The ShotLoft app showing a memory card, the backup folder, and what will be backed up" width="720"></p>
 
 ## Install
 
@@ -20,15 +22,15 @@ sorted into **Year → Month → Day** folders. Open it any time: it only copies
 2. Paste this line and press <kbd>Enter</kbd>:
 
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/imsoumya18/sony-import/main/install.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/imsoumya18/shotloft/main/install.sh | bash
    ```
 
-3. **Sony Import** now appears in your Applications folder and Launchpad. Open it whenever you
+3. **ShotLoft** now appears in your Applications folder and Launchpad. Open it whenever you
    want to back up a card.
 
 It picks the right version for your computer (Mac with Apple or Intel chip, or Linux) by itself.
 To update, run the same line again; the app tells you when there's a new version. On Linux,
-Sony Import appears in your app menu and opens in your web browser.
+ShotLoft appears in your app menu and opens in your web browser.
 
 ### Windows: one line, no security warnings
 
@@ -36,10 +38,10 @@ Sony Import appears in your app menu and opens in your web browser.
 2. Paste this line and press <kbd>Enter</kbd>:
 
    ```powershell
-   irm https://raw.githubusercontent.com/imsoumya18/sony-import/main/install.ps1 | iex
+   irm https://raw.githubusercontent.com/imsoumya18/shotloft/main/install.ps1 | iex
    ```
 
-3. **Sony Import** is now in your Start menu. Search for it whenever you want to back up a card.
+3. **ShotLoft** is now in your Start menu. Search for it whenever you want to back up a card.
 
 To update, run the same line again. No admin rights needed.
 
@@ -48,12 +50,12 @@ To update, run the same line again. No admin rights needed.
 
 | Your computer | Download |
 |---|---|
-| Windows | [sony-import-windows.exe](https://github.com/imsoumya18/sony-import/releases/latest/download/sony-import-windows.exe) |
-| Mac with Apple chip (M1, M2, M3…) | [sony-import-macos-apple-silicon.zip](https://github.com/imsoumya18/sony-import/releases/latest/download/sony-import-macos-apple-silicon.zip) |
-| Mac with Intel chip | [sony-import-macos-intel.zip](https://github.com/imsoumya18/sony-import/releases/latest/download/sony-import-macos-intel.zip) |
-| Linux (64-bit) | [sony-import-linux.zip](https://github.com/imsoumya18/sony-import/releases/latest/download/sony-import-linux.zip) |
+| Windows | [shotloft-windows.exe](https://github.com/imsoumya18/shotloft/releases/latest/download/shotloft-windows.exe) |
+| Mac with Apple chip (M1, M2, M3…) | [shotloft-macos-apple-silicon.zip](https://github.com/imsoumya18/shotloft/releases/latest/download/shotloft-macos-apple-silicon.zip) |
+| Mac with Intel chip | [shotloft-macos-intel.zip](https://github.com/imsoumya18/shotloft/releases/latest/download/shotloft-macos-intel.zip) |
+| Linux (64-bit) | [shotloft-linux.zip](https://github.com/imsoumya18/shotloft/releases/latest/download/shotloft-linux.zip) |
 
-- **Mac:** unzip it, drag **Sony Import** into Applications, and open it. Because it was
+- **Mac:** unzip it, drag **ShotLoft** into Applications, and open it. Because it was
   downloaded in a browser, macOS blocks it the first time:
   1. Click **Done**.
   2. Go to **System Settings → Privacy & Security**.
@@ -62,13 +64,13 @@ To update, run the same line again. No admin rights needed.
   The Terminal line above avoids this, which is why it's the recommended way.
 - **Windows:** double-click it. On "Windows protected your PC", click **More info** → **Run anyway**.
   The PowerShell line above avoids this.
-- **Linux:** unzip it and run `sony-import`. It opens in your web browser.
+- **Linux:** unzip it and run `shotloft`. It opens in your web browser.
 </details>
 
 ## How to use it
 
 1. Put the memory card in your computer, and plug in the drive you back up to.
-2. Open **Sony Import**. It finds the card by itself.
+2. Open **ShotLoft**. It finds the card by itself.
 3. The first time, click **Choose backup folder** and pick any folder on any drive. It remembers
    the folder for next time.
 4. It shows what's new and what's already backed up. Click **Back up** and watch the progress bar.
@@ -126,13 +128,13 @@ Camera Backup/                ← the folder you chose
 <details>
 <summary>Uninstall</summary>
 
-- **Mac:** drag **Sony Import** from Applications to the Trash.
-- **Windows:** delete the folder `%LOCALAPPDATA%\Programs\Sony Import`, and the **Sony Import**
+- **Mac:** drag **ShotLoft** from Applications to the Trash.
+- **Windows:** delete the folder `%LOCALAPPDATA%\Programs\ShotLoft`, and the **ShotLoft**
   shortcut in the Start menu (right-click it → Open file location).
-- **Linux:** delete `~/.local/bin/sony-import` and `~/.local/share/applications/sony-import.desktop`.
+- **Linux:** delete `~/.local/bin/shotloft` and `~/.local/share/applications/shotloft.desktop`.
 
 Your backup folder and photos are never touched. The app also keeps one small settings file, the
-last backup folder you used, in `.sony-import.json` in your home folder. You can delete that too.
+last backup folder you used, in `.shotloft.json` in your home folder. You can delete that too.
 </details>
 
 ---
