@@ -31,9 +31,25 @@ trap 'rm -rf "$tmp"' EXIT
 download() {  # file, then one or more release file names to try in order
   local out="$1"; shift
   for name in "$@"; do
-    curl -fsSL --retry 2 "$RELEASES/$name" -o "$out" 2>/dev/null && return 0
+    curl -fsIL --retry 2 "$RELEASES/$name" -o /dev/null 2>/dev/null || continue   # does it exist?
+    if [ -t 2 ]; then
+      curl -fL --retry 2 --progress-bar "$RELEASES/$name" -o "$out" && return 0  # progress bar
+    else
+      curl -fsSL --retry 2 "$RELEASES/$name" -o "$out" && return 0
+    fi
   done
   fail "Download failed (check your internet connection)"
+}
+
+wait_until_closed() {  # pgrep pattern: ask the user to quit the app before anything is downloaded
+  pgrep -f "$1" >/dev/null 2>&1 || return 0
+  if ! { [ -r /dev/tty ] && [ -w /dev/tty ]; }; then
+    fail "ShotLoft is open. Quit it, then run this line again."
+  fi
+  while pgrep -f "$1" >/dev/null 2>&1; do
+    printf '  %s!%s ShotLoft is open. Quit it (it has to be closed to update), then press Enter... ' "$RED" "$OFF" > /dev/tty
+    read -r _ < /dev/tty || fail "Cancelled."
+  done
 }
 
 # ShotLoft was called Sony Import until v2.0.0. Until the first ShotLoft release exists, fall back
@@ -48,13 +64,6 @@ case "$(uname -s)" in
     else
       arch="intel"; chip="Intel chip"
     fi
-    step "Downloading the latest version for Mac ($chip)..."
-    download "$tmp/app.zip" "shotloft-macos-$arch.zip" "sony-import-macos-$arch.zip"
-    ditto -x -k "$tmp/app.zip" "$tmp/unpacked" || fail "Could not unpack the download"
-    src="$(find "$tmp/unpacked" -maxdepth 1 -name '*.app' | head -1)"
-    [ -n "$src" ] || fail "The download doesn't contain the ShotLoft app"
-    name="$(basename "$src")"
-
     if [ -n "${SHOTLOFT_APPS_DIR:-}" ]; then
       apps="$SHOTLOFT_APPS_DIR"          # explicit choice: create it if needed
     elif [ -w /Applications ]; then
@@ -62,11 +71,19 @@ case "$(uname -s)" in
     else
       apps="$HOME/Applications"          # no admin rights: per-user Applications folder
     fi
+    # Check before downloading: only the copy that would be replaced matters.
+    wait_until_closed "$apps/(ShotLoft|Sony Import)\.app/Contents/"
+
+    step "Downloading the latest version for Mac ($chip)..."
+    download "$tmp/app.zip" "shotloft-macos-$arch.zip" "sony-import-macos-$arch.zip"
+    ditto -x -k "$tmp/app.zip" "$tmp/unpacked" || fail "Could not unpack the download"
+    src="$(find "$tmp/unpacked" -maxdepth 1 -name '*.app' | head -1)"
+    [ -n "$src" ] || fail "The download doesn't contain the ShotLoft app"
+    name="$(basename "$src")"
+
     mkdir -p "$apps" || fail "Could not create $apps"
     app="$apps/$name"
-    if pgrep -f "ShotLoft.app/Contents/MacOS/" >/dev/null 2>&1 || pgrep -f "Sony Import.app/Contents/" >/dev/null 2>&1; then
-      fail "ShotLoft is open. Quit it, then run this line again."
-    fi
+    wait_until_closed "$apps/(ShotLoft|Sony Import)\.app/Contents/"   # in case it was opened meanwhile
     step "Installing to $app ..."
     rm -rf "$app"
     ditto "$src" "$app" || fail "Could not install to $apps"
@@ -100,12 +117,13 @@ case "$(uname -s)" in
 
   Linux)
     [ "$(uname -m)" = "x86_64" ] || fail "Only 64-bit Intel/AMD Linux is supported for now."
+    bin="${SHOTLOFT_BIN_DIR:-$HOME/.local/bin}"
+    wait_until_closed "^$bin/shotloft( |$)"
     step "Downloading the latest version for Linux..."
     download "$tmp/app.zip" "shotloft-linux.zip" "sony-import-linux.zip"
     unzip -q "$tmp/app.zip" -d "$tmp/unpacked" || fail "Could not unpack the download"
     src="$tmp/unpacked/shotloft"; [ -f "$src" ] || src="$tmp/unpacked/sony-import"
     [ -f "$src" ] || fail "The download doesn't contain the ShotLoft app"
-    bin="${SHOTLOFT_BIN_DIR:-$HOME/.local/bin}"
     mkdir -p "$bin"
     install -m 755 "$src" "$bin/shotloft"
     version="$("$bin/shotloft" --version 2>/dev/null | awk '{print $2}')" || version=""

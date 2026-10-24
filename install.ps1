@@ -10,7 +10,6 @@
 
 & {
     $ErrorActionPreference = 'Stop'
-    $ProgressPreference = 'SilentlyContinue'   # the download progress bar makes PowerShell 5 very slow
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
     $releases = if ($env:SHOTLOFT_RELEASES) { $env:SHOTLOFT_RELEASES } else { 'https://github.com/imsoumya18/shotloft/releases/latest/download' }
@@ -20,6 +19,40 @@
     function Step($text) { Write-Host '  > ' -ForegroundColor DarkCyan -NoNewline; Write-Host $text }
     function Fail($text) { Write-Host ''; Write-Host "  x $text" -ForegroundColor Red; Write-Host '' }
 
+    # Downloads with a progress bar. (Invoke-WebRequest's own progress bar makes PowerShell 5 very
+    # slow, so the file is read in 1 MB chunks and progress is shown once per percent.)
+    function Get-File($url, $out) {
+        $resp = [System.Net.WebRequest]::Create($url).GetResponse()
+        $total = $resp.ContentLength
+        $in = $resp.GetResponseStream(); $fs = [System.IO.File]::Create($out)
+        $buf = New-Object byte[] 1MB; $done = 0; $last = -1
+        try {
+            while (($n = $in.Read($buf, 0, $buf.Length)) -gt 0) {
+                $fs.Write($buf, 0, $n); $done += $n
+                if ($total -gt 0) {
+                    $pct = [int][math]::Floor($done * 100 / $total)
+                    if ($pct -ne $last) {
+                        Write-Progress -Activity 'Downloading ShotLoft' -PercentComplete $pct `
+                            -Status ('{0:N1} of {1:N1} MB' -f ($done / 1MB), ($total / 1MB))
+                        $last = $pct
+                    }
+                }
+            }
+        } finally { $fs.Close(); $in.Close(); $resp.Close() }
+        Write-Progress -Activity 'Downloading ShotLoft' -Completed
+    }
+
+    # The app has to be closed to be replaced: ask before downloading, not after.
+    function Wait-Closed {
+        $old = Join-Path $env:LOCALAPPDATA 'Programs\Sony Import'
+        $isOpen = { @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
+            $_.Path -and ($_.Path.StartsWith($installDir, 'OrdinalIgnoreCase') -or $_.Path.StartsWith($old, 'OrdinalIgnoreCase')) }).Count -gt 0 }
+        while (& $isOpen) {
+            Write-Host '  ! ShotLoft is open. Close it (it has to be closed to update), then press Enter' -ForegroundColor Yellow -NoNewline
+            Read-Host | Out-Null
+        }
+    }
+
     Write-Host ''
     Write-Host '  ShotLoft installer' -ForegroundColor DarkCyan
     Write-Host ''
@@ -27,6 +60,7 @@
     if (-not [Environment]::Is64BitOperatingSystem) { Fail 'ShotLoft needs 64-bit Windows.'; return }
 
     try {
+        Wait-Closed
         Step 'Downloading the latest version for Windows...'
         New-Item -ItemType Directory -Force -Path $installDir | Out-Null
         $exe = Join-Path $installDir 'ShotLoft.exe'
@@ -35,11 +69,12 @@
         # fall back to the last Sony Import one.
         $got = $false
         foreach ($name in 'shotloft-windows.exe', 'sony-import-windows.exe') {
-            try { Invoke-WebRequest -Uri "$releases/$name" -OutFile $tmp -UseBasicParsing; $got = $true; break } catch { }
+            try { Get-File "$releases/$name" $tmp; $got = $true; break } catch { Remove-Item -Force $tmp -ErrorAction SilentlyContinue }
         }
         if (-not $got) { throw 'Download failed. Check your internet connection.' }
         Unblock-File -Path $tmp   # make sure nothing carries the "from the internet" mark
 
+        Wait-Closed   # in case it was opened meanwhile
         Step "Installing to $installDir ..."
         try {
             Move-Item -Force -Path $tmp -Destination $exe
