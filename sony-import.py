@@ -784,6 +784,63 @@ def offer_verify(dest, cards):
     return res
 
 
+# ---------------------------------------------------------------- eject
+
+FILE_MANAGER = "Finder" if IS_MAC else "File Explorer" if IS_WIN else "your file manager"
+
+
+def eject(root):
+    """Safely eject a memory card (never formats or deletes). Returns (ejected, details)."""
+    root = os.path.abspath(root)
+    if not os.path.ismount(root):  # only ever eject a whole card, never the drive a folder sits on
+        return False, "not the top of a mounted drive"
+    try:
+        if IS_MAC:
+            r = subprocess.run(["diskutil", "eject", root], capture_output=True, text=True, timeout=60)
+            return r.returncode == 0 and not os.path.exists(root), (r.stderr or r.stdout).strip()
+        if IS_WIN:
+            drive = os.path.splitdrive(root)[0]  # "E:"
+            ps = f"(New-Object -ComObject Shell.Application).Namespace(17).ParseName('{drive}').InvokeVerb('Eject')"
+            subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=60)
+            for _ in range(20):  # the Eject verb reports nothing, so wait for the drive to go away
+                if not os.path.exists(drive + "\\"):
+                    return True, ""
+                time.sleep(0.5)
+            return False, "Windows didn't eject the drive (is a file on it still open?)"
+        if shutil.which("gio"):
+            r = subprocess.run(["gio", "mount", "-e", root], capture_output=True, text=True, timeout=60)
+            if r.returncode == 0:
+                return True, ""
+        if shutil.which("udisksctl") and shutil.which("findmnt"):
+            dev = subprocess.run(["findmnt", "-n", "-o", "SOURCE", "--target", root],
+                                 capture_output=True, text=True).stdout.strip()
+            if dev:
+                r = subprocess.run(["udisksctl", "unmount", "-b", dev], capture_output=True, text=True, timeout=60)
+                if r.returncode == 0:
+                    subprocess.run(["udisksctl", "power-off", "-b", dev], capture_output=True, timeout=60)
+                    return True, ""
+                return False, (r.stderr or r.stdout).strip()
+        return False, "no eject tool found (gio or udisksctl)"
+    except Exception as e:
+        return False, str(e)
+
+
+def offer_eject(cards):
+    """Last question in the interactive flow."""
+    many = len(cards) > 1
+    if not yes(f"Eject the memory card{'s' * many} now?"):
+        print("  " + dim(f"Remember to eject the card{'s' * many} before taking {'them' if many else 'it'} out."))
+        return
+    for c in cards:
+        done, details = eject(c)
+        if done:
+            print("\n  " + ok(f"Ejected {c}. You can take the card out now."))
+        else:
+            print("\n  " + bad(f"Couldn't eject {c}. Please eject it from {FILE_MANAGER}."))
+            if details:
+                print("    " + dim(details))
+
+
 def _windows_drive_is_removable(path):
     import ctypes
     root = os.path.splitdrive(os.path.abspath(path))[0] + "\\"
@@ -1158,6 +1215,7 @@ def interactive(dest):
     if not plan["items"]:
         print("\n  " + ok("Everything on the card is already backed up. Nothing to copy."))
         offer_verify(dest, info["cards"])
+        offer_eject(info["cards"])
         return 0
     if not plan["enough_space"]:
         return 1
@@ -1179,7 +1237,8 @@ def interactive(dest):
         print("\n  " + bad("Some files were not copied. Run Sony Import again to retry them."))
         return 1
     offer_verify(dest, info["cards"])
-    print("\n  " + ok("All done. You can safely remove the memory card."))
+    print("\n  " + ok("All done. Your photos and videos are backed up."))
+    offer_eject(info["cards"])
     return 0
 
 
@@ -1218,6 +1277,8 @@ def main():
     p.add_argument("--dest", default=DEFAULT_DEST)
     p.add_argument("--card", action="append", help="card root; default: all detected")
     p.add_argument("--json", action="store_true")
+    p = sub.add_parser("eject", help="safely eject memory cards (never formats)")
+    p.add_argument("--card", action="append", help="card root; default: all detected")
     p = sub.add_parser("check-update", help="is a newer release available?")
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("trash-jpgs", help="move JPGs that have an ARW twin to the Trash")
@@ -1230,6 +1291,17 @@ def main():
         info = detect(args.dest)
         print(json.dumps(info, indent=2)) if args.json else print_detect(info)
         return 0
+    if args.cmd == "eject":
+        cards = args.card or detect()["cards"]
+        if not cards:
+            print("No Sony camera card found.", file=sys.stderr)
+            return 2
+        failed = 0
+        for c in cards:
+            done, details = eject(c)
+            print(f"Ejected {c}" if done else f"Couldn't eject {c}: {details}")
+            failed += not done
+        return 1 if failed else 0
     if args.cmd == "check-update":
         latest = latest_version()
         newer = bool(latest) and _vtuple(latest) > _vtuple(__version__)

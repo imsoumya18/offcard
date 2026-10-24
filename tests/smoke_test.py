@@ -176,6 +176,11 @@ def main():
         if verify(tool, dest, card, 0)[:4] != (True, 0, 0, 1):
             sys.exit("FAIL: a JPG removed on purpose should not make the card unsafe")
 
+        # Eject refuses anything that isn't a mounted drive (here: the fake card folder).
+        out = run(tool + ["eject", "--card", card], expect=1)
+        if "not the top of a mounted drive" not in out:
+            sys.exit(f"FAIL: eject should refuse a plain folder: {out}")
+
         # Update notice: a newer release is reported, an older or equal one isn't, offline is quiet.
         for tag, expected in (("v99.0.0", True), ("v0.0.1", False)):
             fake = os.path.join(tmp, "latest.json")
