@@ -5,7 +5,7 @@ when a new version is out.
 
 ShotLoft was called **Sony Import** up to v2.0.0.
 
-## [Unreleased]
+## [2.2.0] - 2026-10-24
 
 - **A home for every tool.** ShotLoft now opens on its tools, **Card Backup** and **HDR Merge**,
   so you pick what you want to do. More tools will join them.
