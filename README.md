@@ -7,10 +7,10 @@
 [![Setup](https://img.shields.io/badge/setup-one%20line-008787)](#install)
 [![License: MIT](https://img.shields.io/github/license/imsoumya18/sony-import?color=008787)](LICENSE)
 
-Back up the photos and videos from your Sony camera's memory card, neatly sorted into
-**Year → Month → Day** folders. Run it again any time: it only copies what's new.
+A simple app that backs up the photos and videos from your Sony camera's memory card, neatly
+sorted into **Year → Month → Day** folders. Open it any time: it only copies what's new.
 
-<p align="center"><img src="docs/screenshot.png" alt="Sony Import confirming that every file on a memory card is backed up and it's safe to format" width="720"></p>
+<p align="center"><img src="docs/screenshot.png" alt="The Sony Import app showing a memory card, the backup folder, and what will be backed up" width="720"></p>
 
 ## Install
 
@@ -23,11 +23,12 @@ Back up the photos and videos from your Sony camera's memory card, neatly sorted
    curl -fsSL https://raw.githubusercontent.com/imsoumya18/sony-import/main/install.sh | bash
    ```
 
-3. **Sony Import** now appears in your Applications folder and Launchpad. Double-click it whenever
-   you want to back up a card.
+3. **Sony Import** now appears in your Applications folder and Launchpad. Open it whenever you
+   want to back up a card.
 
 It picks the right version for your computer (Mac with Apple or Intel chip, or Linux) by itself.
-To update, run the same line again. On Linux, Sony Import appears in your app menu.
+To update, run the same line again; the app tells you when there's a new version. On Linux,
+Sony Import appears in your app menu and opens in your web browser.
 
 ### Windows: one line, no security warnings
 
@@ -52,8 +53,8 @@ To update, run the same line again. No admin rights needed.
 | Mac with Intel chip | [sony-import-macos-intel.zip](https://github.com/imsoumya18/sony-import/releases/latest/download/sony-import-macos-intel.zip) |
 | Linux (64-bit) | [sony-import-linux.zip](https://github.com/imsoumya18/sony-import/releases/latest/download/sony-import-linux.zip) |
 
-- **Mac:** unzip it and double-click `sony-import`. Because it was downloaded in a browser,
-  macOS blocks it the first time:
+- **Mac:** unzip it, drag **Sony Import** into Applications, and open it. Because it was
+  downloaded in a browser, macOS blocks it the first time:
   1. Click **Done**.
   2. Go to **System Settings → Privacy & Security**.
   3. Scroll down and click **Open Anyway**.
@@ -61,19 +62,19 @@ To update, run the same line again. No admin rights needed.
   The Terminal line above avoids this, which is why it's the recommended way.
 - **Windows:** double-click it. On "Windows protected your PC", click **More info** → **Run anyway**.
   The PowerShell line above avoids this.
-- **Linux:** unzip it, open a terminal in that folder and run `./sony-import`.
+- **Linux:** unzip it and run `sony-import`. It opens in your web browser.
 </details>
 
 ## How to use it
 
 1. Put the memory card in your computer, and plug in the drive you back up to.
-2. Open **Sony Import**: from Applications on a Mac, the Start menu on Windows, or the app menu on Linux.
-3. **Choose your backup folder:** drag the folder into the window and press Enter. It can be any
-   folder on any drive. Next time, just press Enter to reuse it.
-4. Check what it found and type `y` to start copying.
-5. **Planning to format the card?** Type `y` when it offers to check every file byte by byte.
-   It tells you when it's safe to format the card in your camera.
-6. When it says **All done**, type `y` to **eject the card**, then press Enter to close the window.
+2. Open **Sony Import**. It finds the card by itself.
+3. The first time, click **Choose backup folder** and pick any folder on any drive. It remembers
+   the folder for next time.
+4. It shows what's new and what's already backed up. Click **Back up** and watch the progress bar.
+5. **Planning to format the card?** Click **Check it's safe to format**. It checks every file
+   byte by byte and tells you when it's safe to format the card in your camera.
+6. Click **Eject card** and take it out.
 
 Your backup folder will look like this:
 
@@ -95,8 +96,8 @@ Camera Backup/                ← the folder you chose
 - Never changes your memory card. It only reads from it.
 - Checks there's enough space on your backup drive before copying anything.
 - Tells you when it's safe to format the card, after checking every file byte by byte.
-- Safe to interrupt. If you close the window midway, just run it again to finish.
-- Ejects the card for you when it's done, so you can take it straight out.
+- Safe to interrupt. If you close the window midway, just open it again to finish.
+- Ejects the card for you, so you can take it straight out.
 
 **Keeps them organised**
 - Sorts everything by the date you took it, with videos in a `Videos` folder inside their day.
@@ -106,8 +107,9 @@ Camera Backup/                ← the folder you chose
 - Shot in RAW + JPG? It offers to move the extra JPGs to the Trash, where you can restore them.
 
 **Stays easy**
+- One window: your card, your backup folder, what's new, and one button.
 - One line to install on Windows, Mac or Linux, with no security warnings.
-- Tells you when an update is out, with the line to install it.
+- Follows your computer's light or dark mode, and tells you when an update is out.
 
 ## Good to know
 
@@ -116,14 +118,16 @@ Camera Backup/                ← the folder you chose
 - **Checking a full card takes about a minute** before copying starts. The byte-by-byte
   "safe to format" check takes about a minute for every 2 GB on the card, depending on your card
   reader.
-- **Privacy:** your photos never leave your computer. The only internet use is a quick check with
-  GitHub for a newer version. Set `SONY_IMPORT_NO_UPDATE_CHECK=1` to turn it off.
+- **Privacy:** your photos never leave your computer. The app's window talks only to the app
+  itself, on your computer. The only internet use is a quick check with GitHub for a newer version.
+- **Windows 10:** the app's window needs Microsoft's free WebView2 component. It's built into
+  Windows 11 and most up-to-date Windows 10 PCs.
 
 <details>
 <summary>Uninstall</summary>
 
 - **Mac:** drag **Sony Import** from Applications to the Trash.
-- **Windows:** delete the folder `%LOCALAPPDATA%\Programs\Sony Import` and the **Sony Import**
+- **Windows:** delete the folder `%LOCALAPPDATA%\Programs\Sony Import`, and the **Sony Import**
   shortcut in the Start menu (right-click it → Open file location).
 - **Linux:** delete `~/.local/bin/sony-import` and `~/.local/share/applications/sony-import.desktop`.
 
@@ -133,5 +137,5 @@ last backup folder you used, in `.sony-import.json` in your home folder. You can
 
 ---
 
-**[What's new](CHANGELOG.md)** in each version. Developers: see **[DEVELOPMENT.md](DEVELOPMENT.md)** for running from source, scripting, how it
-works, and releasing. Licensed under [MIT](LICENSE).
+**[What's new](CHANGELOG.md)** in each version. Developers: see **[DEVELOPMENT.md](DEVELOPMENT.md)** for running from source, how it works, and
+releasing. Licensed under [MIT](LICENSE).

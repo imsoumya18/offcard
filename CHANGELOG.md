@@ -5,8 +5,15 @@ when a new version is out.
 
 ## [Unreleased]
 
-- **Eject the card from the app.** At the end, Sony Import offers to eject your memory card, so
-  you can take it out straight away. It only ever ejects; it never formats or deletes anything.
+- **Sony Import is now a desktop app.** One window instead of a terminal: your card and backup
+  folder, what's new and what's already backed up, and one **Back up** button with a progress bar.
+  Then there are buttons to **check it's safe to format**, **eject the card**, and move extra JPGs
+  to the Trash. It follows your computer's light or dark mode.
+- **The terminal version is gone.** To switch, run the install line from the README once more. It
+  replaces the old version with the app, under the same name.
+- **Eject the card** with one click when you're done. It only ever ejects; it never formats or
+  deletes anything.
+- On Linux, the app opens in your web browser.
 
 ## [1.3.1] - 2026-10-22
 
