@@ -14,6 +14,10 @@
 
 [Install](#install) • [How to use](#how-to-use) • [Tech stack](#tech-stack) • [What's new](CHANGELOG.md)
 
+<a href="docs/launch.mp4"><img src="docs/launch.gif" alt="ShotLoft in the Mac menu bar: a card goes in, the panel shows what's new and the folders it goes into, Back Up fills a progress ring, then Safe to format" width="760"></a>
+
+<sub>23 seconds. <a href="docs/launch.mp4">Watch with sound</a>.</sub>
+
 </div>
 
 ## Install
@@ -50,19 +54,23 @@ anyway**. The one-line install avoids this.
 
 ## How to use
 
-**On a Mac**, ShotLoft lives in the menu bar: click its aperture icon for a small panel with your
-card, where it goes, and the tools. It opens at login (switch that off under ⋯), and when you put
-in a card with new photos, the icon gets a dot.
+**On a Mac**, ShotLoft lives in the menu bar. Click its aperture icon for a small panel: your
+memory card, where it backs up to, and HDR Merge. When you put in a card with new photos, the icon
+gets a dot. It opens at login; switch that off at the bottom of the panel.
+
 **On Windows and Linux**, open ShotLoft and pick a tool.
 
 ### Card Backup
 
 1. Put the memory card in, and connect the drive you back up to.
-2. Click **Card Backup** (on a Mac, the menu bar icon), then **Choose backup folder** (only the
-   first time).
-3. Click **Back up**. Only new photos and videos are copied. On a Mac, the panel first shows the
-   folders it will create and how many files go into each.
-4. Before formatting the card, click **Check it's safe to format**. Then click **Eject card**.
+2. Choose where the backup goes, once: on a Mac, **Choose Folder…** in the panel (afterwards,
+   **Change** under *Back Up To* lists the folders you've used); on Windows and Linux, **Card
+   Backup**, then **Choose backup folder**.
+3. Click **Back Up**. The button says how much is new, for example **Back Up 148 Files**. Only new
+   photos and videos are copied. On a Mac, the panel first shows the folders it will create and
+   how many files go into each, and a ring fills as it copies.
+4. Before formatting the card, click **Check Before Formatting** (**Check it's safe to format** on
+   Windows and Linux). When it says *Safe to format*, click **Eject**.
 
 The card is only ever read, never changed. Your backup folder is sorted by the day you took each
 shot, and every file gets one clean number in shooting order:
@@ -86,8 +94,8 @@ Camera Backup/                      ← the folder you chose
 
 1. On the camera, shoot with **Continuous Bracket (BRK C)** in **RAW**, for example 3 shots at
    ±2 EV.
-2. Click **HDR Merge** (on a Mac, it opens in its own window) and choose a folder. Your backup folder works: every folder inside it is
-   searched.
+2. Click **HDR Merge** (on a Mac, it opens in its own window) and choose a folder. Your backup
+   folder works: every folder inside it is searched.
 3. Tick the bracketed sets it finds, and click **Merge to HDR**. Each takes about 30 seconds.
 
 Results go into the day's `HDR` folder, beside `Photos` and `Videos` (in other folders, an `HDR`
@@ -97,7 +105,7 @@ folder next to the shots). The original shots are never changed.
 
 | Part | Built with |
 |---|---|
-| Mac app | Native [SwiftUI](https://developer.apple.com/xcode/swiftui/) menu bar app on Liquid Glass, with the Python engine inside |
+| Mac app | Native [SwiftUI](https://developer.apple.com/xcode/swiftui/) menu bar app, built like the Mac's own menus, with the Python engine inside |
 | Windows and Linux | One HTML page: in a [pywebview](https://pywebview.flowrl.com/) (WebView2) window on Windows, in the browser on Linux |
 | Backup engine | Python standard library: EXIF reading, content fingerprints, byte-by-byte verify |
 | HDR merge | [NumPy](https://numpy.org/), [rawpy](https://github.com/letmaik/rawpy) ([LibRaw](https://www.libraw.org/)), [Pillow](https://python-pillow.org/): noise-weighted RAW merge, alignment, ghost removal, exposure fusion |
