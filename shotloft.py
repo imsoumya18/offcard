@@ -156,6 +156,29 @@ def day_label(rel):
     return f"{int(day[:2])} {day[2:5]} 20{day[5:7]}" if len(day) == 7 and day[:2].isdigit() else day
 
 
+def folder_tree(dest, items):
+    """The folders a backup writes into, as a tree under the backup folder, in shooting order:
+    each with whether it's new (doesn't exist yet) and how many files go straight into it."""
+    counts = {}
+    for it in items:
+        for target in it["targets"]:
+            rel = os.path.relpath(os.path.dirname(target), dest)
+            counts[rel] = counts.get(rel, 0) + 1
+    root = {"name": os.path.basename(dest.rstrip("/\\")) or dest, "new": not os.path.isdir(dest),
+            "files": 0, "children": []}
+    for rel, n in counts.items():
+        node, path = root, dest
+        for part in ([] if rel == "." else rel.split(os.sep)):
+            path = os.path.join(path, part)
+            child = next((c for c in node["children"] if c["name"] == part), None)
+            if child is None:
+                child = {"name": part, "new": not os.path.isdir(path), "files": 0, "children": []}
+                node["children"].append(child)
+            node = child
+        node["files"] += n
+    return root
+
+
 def plan_summary(plan):
     days = {}
     for it in plan["items"]:
@@ -172,6 +195,7 @@ def plan_summary(plan):
         "enough_space": plan["enough_space"], "dest_existing_files": plan["dest_existing_files"],
         "days": [{"folder": k, "label": day_label(k), "photos": v[0], "videos": v[1], "xml": v[2]}
                  for k, v in days.items()],
+        "tree": folder_tree(plan["dest"], plan["items"]),
         "from": min((c["from"] for c in cards if c["from"]), default=None),
         "to": max((c["to"] for c in cards if c["to"]), default=None),
     }

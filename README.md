@@ -60,7 +60,8 @@ in a card with new photos, the icon gets a dot.
 1. Put the memory card in, and connect the drive you back up to.
 2. Click **Card Backup** (on a Mac, the menu bar icon), then **Choose backup folder** (only the
    first time).
-3. Click **Back up**. Only new photos and videos are copied.
+3. Click **Back up**. Only new photos and videos are copied. On a Mac, the panel first shows the
+   folders it will create and how many files go into each.
 4. Before formatting the card, click **Check it's safe to format**. Then click **Eject card**.
 
 The card is only ever read, never changed. Your backup folder is sorted by the day you took each

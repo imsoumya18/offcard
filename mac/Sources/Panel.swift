@@ -124,6 +124,81 @@ func placeName(_ path: String) -> String {
     return parts.last.map { $0 == drive ? drive : "\(drive) › \($0)" } ?? drive
 }
 
+/// The folder tree a backup will create under the chosen folder, like Finder's list view: what's
+/// already there, what's new, and how many files land in each folder. Long trips show the first
+/// few days, then "and N more days".
+struct FolderPreview: View {
+    let tree: J
+    static let dayLimit = 3
+
+    struct Row: Identifiable {
+        let id: Int
+        let depth: Int
+        let name: String
+        let new: Bool
+        let files: Int
+        let leaf: Bool
+        let label: Bool          // where a new branch starts, or a folder that's already there
+    }
+
+    var rows: (shown: [Row], moreDays: Int) {
+        var rows: [Row] = [], days = 0
+        func walk(_ node: J, _ depth: Int, parentNew: Bool = false) {
+            let children = node.children.array
+            if days >= Self.dayLimit && depth > 0 && depth <= 3 {   // past the limit: count, don't show
+                days += dayCount(node, depth)
+                return
+            }
+            if depth == 3 { days += 1 }    // Year / Month / Day
+            rows.append(Row(id: rows.count, depth: depth, name: node.name.str, new: node.new.bool,
+                            files: node.files.int, leaf: children.isEmpty, label: !parentNew))
+            children.forEach { walk($0, depth + 1, parentNew: node.new.bool) }
+        }
+        walk(tree, 0)
+        return (rows, max(0, days - Self.dayLimit))
+    }
+
+    func dayCount(_ node: J, _ depth: Int) -> Int {
+        depth == 3 ? 1 : node.children.array.reduce(0) { $0 + dayCount($1, depth + 1) }
+    }
+
+    var body: some View {
+        let (shown, moreDays) = rows
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(shown) { row in
+                HStack(spacing: 5) {
+                    Image(systemName: row.leaf ? "folder" : "folder.fill")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(row.new ? AnyShapeStyle(brand) : AnyShapeStyle(.secondary))
+                        .frame(width: 14)
+                    Text(row.name).font(.system(size: 11.5, weight: row.depth == 0 ? .medium : .regular))
+                        .foregroundStyle(row.new ? .primary : .secondary).lineLimit(1)
+                    Spacer(minLength: 6)
+                    if row.files > 0 {
+                        Text(plural(row.files, "file")).font(.system(size: 11)).monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                    if row.label {
+                        Text(row.new ? "New" : "Already there").font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(row.new ? AnyShapeStyle(brand) : AnyShapeStyle(.tertiary))
+                    }
+                }
+                .padding(.leading, CGFloat(row.depth) * 12)
+                .frame(height: 19)
+            }
+            if moreDays > 0 {
+                Text("and \(plural(moreDays, "more day"))")
+                    .font(.system(size: 11)).foregroundStyle(.tertiary)
+                    .padding(.leading, 3 * 12 + 19).frame(height: 18)
+            }
+        }
+        .padding(.horizontal, 9).padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(.fill.quaternary))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Folders this backup creates")
+    }
+}
+
 // MARK: the panel
 
 struct PanelView: View {
@@ -151,6 +226,7 @@ struct PanelView: View {
                         .foregroundStyle(note.bad ? Color.red : Color.secondary)
                         .padding(.horizontal, 12).padding(.bottom, 6).padding(.top, -2)
                 }
+                if showsFolders { FolderPreview(tree: s.job.result.tree).padding(.horizontal, 12).padding(.bottom, 8) }
                 cardActions
                 Rule()
                 MenuRow(symbol: "square.stack.3d.up.fill", title: "HDR Merge", detail: hdrDetail,
@@ -249,6 +325,13 @@ struct PanelView: View {
             heroRow(CardPicture(photo: photo), cardName, bad > 0 ? "\(plural(bad, "file")) not backed up yet" : "Safe to format",
                     tone: bad > 0 ? .red : .green)
         }
+    }
+
+    /// The folders a backup is about to write into, once it's checked and ready to go.
+    var showsFolders: Bool {
+        let job = s.job
+        return job.kind.str == "plan" && job.state.str == "done" && job.result.new_files.int > 0
+            && job.result.tree.exists
     }
 
     enum Tone { case normal, green, red }

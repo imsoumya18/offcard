@@ -68,6 +68,14 @@ def main():
             call("/api/plan", {})
             plan = wait("plan")
             assert plan["new_photos"] == 5 and plan["new_videos"] == 1 and plan["enough_space"], plan
+            # the folder preview: every file lands in a leaf, and nothing there exists yet
+            def leaves(n, path=()):
+                path = path + (n["name"],)
+                return [(path, n["files"], n["new"])] if not n["children"] else \
+                    [x for c in n["children"] for x in leaves(c, path)]
+            got = leaves(plan["tree"])
+            assert sum(f for _, f, _ in got) == plan["new_files"] and all(new for *_, new in got), got
+            assert all(p[-1] in ("Photos", "Videos") and len(p) == 5 for p, _, _ in got), got
             call("/api/import", {})
             rep = wait("import")
             assert rep["photos"] == 5 and rep["videos"] == 1 and not rep["errors"] and rep["raw_jpg_pairs"] == 1, rep
