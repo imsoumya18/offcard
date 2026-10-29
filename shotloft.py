@@ -136,18 +136,26 @@ def card_summary(card):
     photos = sum(len(it["files"]) for it in items if it["kind"] != "video")
     videos = sum(1 for it in items if it["kind"] == "video")
     return {"path": card, "name": os.path.basename(card.rstrip("/\\")) or card,
-            "photos": photos, "videos": videos, "photo": newest_photo(items)}
+            "photos": photos, "videos": videos, "recent": newest_photos(items)}
 
 
-def newest_photo(items):
-    """A small preview of the card's newest photo (the camera's own embedded JPEG), cached."""
+def newest_photos(items, count=4):
+    """Small previews of the card's newest photos, newest first (the camera's own embedded JPEGs),
+    cached. Photos without a usable preview are left out."""
     shots = [it for it in items if it["kind"] != "video"]
-    if not shots or HDR is None:
-        return None
-    try:
-        return thumbnail(shots[-1]["key_file"], 160)
-    except Exception:
-        return None
+    if HDR is None:
+        return []
+    found = []
+    for it in reversed(shots[-count * 2:]):
+        try:
+            uri = thumbnail(it["key_file"], 200)
+        except Exception:
+            uri = None
+        if uri:
+            found.append(uri)
+        if len(found) == count:
+            break
+    return found
 
 
 def day_label(rel):
@@ -365,15 +373,19 @@ def thumbnail(path, size=240):
     uri = None
     try:
         from PIL import Image
+        turn = 0
         if path.upper().endswith(".ARW"):
             with rawpy.imread(path) as r:
                 th = r.extract_thumb()
+                turn = {3: 180, 5: 90, 6: -90}.get(r.sizes.flip, 0)   # the camera's preview isn't turned
             im = Image.open(io.BytesIO(th.data)) if th.format == rawpy.ThumbFormat.JPEG else None
         else:
             im = Image.open(path)
         if im is not None:
             im.draft("RGB", (size, size))
             im = im.convert("RGB")
+            if turn:
+                im = im.rotate(turn, expand=True)
             im.thumbnail((size, size))
             buf = io.BytesIO()
             im.save(buf, "JPEG", quality=82)
