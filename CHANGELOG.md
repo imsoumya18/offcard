@@ -5,7 +5,7 @@ when a new version is out.
 
 ShotLoft was called **Sony Import** up to v2.0.0.
 
-## [Unreleased]
+## [2.3.0] - 2026-10-29
 
 - **ShotLoft moves to the menu bar on the Mac.** Click the aperture icon for a panel on Liquid
   Glass with your card, your backup drive and the tools; there's no window or Dock icon to manage.
@@ -13,9 +13,8 @@ ShotLoft was called **Sony Import** up to v2.0.0.
   while it copies, the icon shows the progress. HDR Merge opens in its own window. ShotLoft now
   opens at login, which you can switch off in the panel.
 - **Photos get their own folder.** Each day folder now has `Photos`, `Videos` and, for HDR Merge
-  results, `HDR`.
-  Photos you already backed up stay where they are and are still recognised, so nothing is copied
-  twice.
+  results, `HDR`, and only the ones with files in them. Photos you already backed up stay where
+  they are and are still recognised, so nothing is copied twice.
 
 ## [2.2.0] - 2026-10-24
 
