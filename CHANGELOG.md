@@ -7,14 +7,15 @@ ShotLoft was called **Sony Import** up to v2.0.0.
 
 ## Unreleased
 
-- **See the folders before you back up.** On a Mac, once a card is checked, the panel shows the folder tree
-  the backup will create under the folder you chose: which folders are already there, which are
-  new, and how many files go into each.
+- **See the folders before you back up.** On a Mac, once a card is checked, the panel shows the
+  folder tree the backup will create under the folder you chose: which folders are already there,
+  which are new, and how many files go into each.
 - **A redesigned panel, built like the Mac's own menus.** Memory Card, Back Up To and Tools, each
-  under a small heading, in your Mac's accent colour. The card shows its newest shots, the button
-  says exactly what it does ("Back Up 6 Photos"), copying shows a progress bar with "About 2
-  minutes", and Open at Login and Quit sit at the bottom.
-- **Portrait photos stand upright** in the panel and in HDR Merge.
+  under a small heading, in a quiet graphite. The button says exactly what it does ("Back Up 6
+  Photos"), copying shows the percentage in a ring that fills with liquid as it goes, with "About
+  2 minutes left", and Open at Login and Quit sit at the bottom. The panel shows no photos from
+  the card.
+- **Portrait photos stand upright** in HDR Merge.
 
 ## [2.5.0] - 2026-10-30
 

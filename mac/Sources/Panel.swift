@@ -1,13 +1,14 @@
 // The menu bar panel, built like the system's own (Wi-Fi, Bluetooth, Control Center): rows straight
-// on the glass under small section headings, one round icon and one text column throughout, the
-// system accent colour only, and one plain button for the one thing to do next.
+// on the glass under small section headings, one round icon and one text column throughout, one
+// quiet colour (graphite), and one plain button for the one thing to do next.
 //
-// Type: 13 for rows, 11 for the line under a row, 11 semibold for headings. Colour: the accent,
+// Type: 13 for rows, 11 for the line under a row, 11 semibold for headings. Colour: graphite,
 // green only for "safe", red only for problems; everything else is the system's greys.
 
 import SwiftUI
 
-let brand = Color.accentColor
+/// ShotLoft's one colour: the system graphite, in light and dark.
+let brand = Color(nsColor: .systemGray)
 
 enum Metrics {
     static let width: CGFloat = 300
@@ -115,38 +116,77 @@ struct Rule: View {
     var body: some View { Divider().padding(.horizontal, Metrics.inset).padding(.vertical, 5) }
 }
 
-/// The card's newest shots: small rounded previews in the text column.
-struct PhotoStrip: View {
-    let photos: [NSImage]
-    static let tile: CGFloat = 44
+/// Copy progress as a ring with the percentage inside, like an App Store download, filling with
+/// liquid as it goes: two waves drift and rise with the copy, settling flat as it nears full. The
+/// engine reports every half second; the level glides over the same time, so it never steps.
+struct ProgressRing: View {
+    let progress: Double
+    static let size: CGFloat = 36
+    @Environment(\.accessibilityReduceMotion) private var still
 
     var body: some View {
-        HStack(spacing: 5) {
-            ForEach(Array(photos.prefix(5).enumerated()), id: \.offset) { _, photo in
-                Image(nsImage: photo).resizable().aspectRatio(contentMode: .fill)
-                    .frame(width: Self.tile, height: Self.tile)
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5))
+        let p = min(max(progress, 0), 1)
+        let label = Text("\(Int(p * 100))%")
+            .font(.system(size: 9.5, weight: .semibold, design: .rounded)).monospacedDigit()
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: still)) { time in
+            let t = still ? 0 : time.date.timeIntervalSinceReferenceDate
+            ZStack {
+                ZStack {
+                    Wave(level: p, phase: t * 1.7 + 2.1).fill(brand.opacity(0.2))
+                    Wave(level: p, phase: t * 2.6).fill(brand.opacity(0.55))
+                }
+                .clipShape(Circle().inset(by: 4))
+                Circle().stroke(Color.primary.opacity(0.1), lineWidth: 2.5)
+                Circle().trim(from: 0, to: max(p, 0.004))
+                    .stroke(brand, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                label.foregroundStyle(.primary)
             }
         }
-        .padding(.leading, Metrics.text).padding(.bottom, 4)
-        .accessibilityHidden(true)
+        .frame(width: Self.size, height: Self.size)
+        .animation(.linear(duration: 0.55), value: p)
+        .accessibilityElement()
+        .accessibilityLabel("\(Int(p * 100)) percent")
+    }
+}
+
+/// The liquid's surface: a gentle sine wave at `level` (0 empty, 1 full), calmer near either end.
+struct Wave: Shape {
+    var level: Double
+    var phase: Double
+
+    var animatableData: Double {
+        get { level }
+        set { level = newValue }
+    }
+
+    func path(in r: CGRect) -> Path {
+        let surface = r.maxY - CGFloat(level) * r.height
+        let height = 1.6 * sin(.pi * min(max(level, 0), 1)) + 0.3
+        var path = Path()
+        path.move(to: CGPoint(x: r.minX, y: r.maxY))
+        for x in stride(from: r.minX, through: r.maxX, by: 1) {
+            let angle = Double((x - r.minX) / r.width) * 2 * .pi * 1.1 + phase
+            path.addLine(to: CGPoint(x: x, y: surface + CGFloat(sin(angle)) * height))
+        }
+        path.addLine(to: CGPoint(x: r.maxX, y: r.maxY))
+        path.closeSubpath()
+        return path
     }
 }
 
 extension View {
-    /// The one main action: Liquid Glass on macOS 26, a filled button before; the system accent.
+    /// The one main action: Liquid Glass on macOS 26, a filled button before; in graphite.
     @ViewBuilder func mainAction(large: Bool = false) -> some View {
         let size: ControlSize = large ? .large : .regular
         #if compiler(>=6.2)
         if #available(macOS 26.0, *) {
-            self.buttonStyle(.glassProminent).controlSize(size)
+            self.buttonStyle(.glassProminent).tint(brand).controlSize(size)
         } else {
-            self.buttonStyle(.borderedProminent).controlSize(size)
+            self.buttonStyle(.borderedProminent).tint(brand).controlSize(size)
         }
         #else
-        self.buttonStyle(.borderedProminent).controlSize(size)
+        self.buttonStyle(.borderedProminent).tint(brand).controlSize(size)
         #endif
     }
 }
@@ -335,9 +375,9 @@ struct PanelView: View {
         }
         if st == "error" { return CardStatus(line: job.error.str, icon: "exclamationmark", tint: .red) }
         if st == "running" && kind == "import" {
-            return CardStatus(line: p.exists ? "Copying \(p.files_done.int.formatted()) of \(p.files_total.int.formatted())…" : "Starting…",
+            return CardStatus(line: p.exists ? "Copying \(amountOf(p.done.double, p.total.double))" : "Starting…",
                               active: true, progress: fraction,
-                              progressLine: p.exists ? "\(human(p.done.double)) of \(human(p.total.double))\(timeLeft(p))" : nil)
+                              progressLine: timeLeft(p))
         }
         if st == "running" && kind == "verify" {
             return CardStatus(line: "Comparing every file byte by byte…", active: true, progress: fraction)
@@ -372,22 +412,14 @@ struct PanelView: View {
             RowContent(symbol: "sdcard", title: "No Memory Card", subtitle: "Insert one to back it up.")
         } else {
             let st = status
-            RowContent(symbol: st.icon, active: st.active, tint: st.tint, title: cardName, subtitle: st.line,
+            RowContent(symbol: st.icon, active: st.active, tint: st.tint, title: cardName,
+                       subtitle: [st.line, st.progressLine].compactMap { $0 }.joined(separator: "\n"),
                        subtitleColor: st.tint == .red ? .red : nil) {
-                if st.spinner { ProgressView().controlSize(.small) }
-            }
-            let photos = card.recent.strings.compactMap { image(fromDataURI: $0) }
-            if !photos.isEmpty { PhotoStrip(photos: photos) }
-            if let progress = st.progress {
-                VStack(alignment: .leading, spacing: 3) {
-                    if progress < 0 { ProgressView().progressViewStyle(.linear) }
-                    else { ProgressView(value: min(max(progress, 0), 1)).progressViewStyle(.linear) }
-                    if let line = st.progressLine {
-                        Text(line).font(.system(size: 11)).monospacedDigit().foregroundStyle(.secondary)
-                    }
+                if let progress = st.progress, progress >= 0 {
+                    ProgressRing(progress: progress)
+                } else if st.spinner || st.progress != nil {
+                    ProgressView().controlSize(.small)
                 }
-                .controlSize(.small)
-                .padding(.leading, Metrics.text).padding(.trailing, Metrics.inset).padding(.vertical, 4)
             }
             if let note {
                 Text(note.text).font(.system(size: 11)).foregroundStyle(note.bad ? Color.red : Color.secondary)
@@ -461,11 +493,22 @@ struct PanelView: View {
         .help("Choose where this backup goes")
     }
 
-    func timeLeft(_ p: J) -> String {
+    /// "2.2 of 5.7 GB": both in the total's unit, the unit said once.
+    func amountOf(_ done: Double, _ total: Double) -> String {
+        let f = ByteCountFormatter()
+        f.countStyle = .binary
+        f.allowedUnits = total >= 1_073_741_824 ? .useGB : total >= 1_048_576 ? .useMB : .useKB
+        let whole = f.string(fromByteCount: Int64(total))
+        f.includesUnit = false
+        return "\(f.string(fromByteCount: Int64(done))) of \(whole)"
+    }
+
+    /// "About 2 minutes left", once there's enough to go on.
+    func timeLeft(_ p: J) -> String? {
         let done = p.done.double, total = p.total.double, t = p.elapsed.double
-        guard t > 2, done > 0, done < total else { return "" }
+        guard t > 2, done > 0, done < total else { return nil }
         let left = (total - done) / (done / t)
-        return left < 50 ? " — Less than a minute" : " — About \(plural(Int((left / 60).rounded(.up)), "minute"))"
+        return left < 50 ? "Less than a minute left" : "About \(plural(Int((left / 60).rounded(.up)), "minute")) left"
     }
 
     // MARK: after a backup
@@ -504,7 +547,7 @@ struct PanelView: View {
                 Spacer()
                 Toggle("Open at Login", isOn: Binding(get: { loginOn },
                                                       set: { System.setOpensAtLogin($0); loginOn = System.opensAtLogin }))
-                    .labelsHidden().toggleStyle(.switch).controlSize(.mini)
+                    .labelsHidden().toggleStyle(.switch).controlSize(.mini).tint(brand)
             }
             .padding(.horizontal, Metrics.inset).frame(height: 26)
             Button { NSApp.terminate(nil) } label: {

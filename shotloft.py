@@ -136,26 +136,7 @@ def card_summary(card):
     photos = sum(len(it["files"]) for it in items if it["kind"] != "video")
     videos = sum(1 for it in items if it["kind"] == "video")
     return {"path": card, "name": os.path.basename(card.rstrip("/\\")) or card,
-            "photos": photos, "videos": videos, "recent": newest_photos(items)}
-
-
-def newest_photos(items, count=4):
-    """Small previews of the card's newest photos, newest first (the camera's own embedded JPEGs),
-    cached. Photos without a usable preview are left out."""
-    shots = [it for it in items if it["kind"] != "video"]
-    if HDR is None:
-        return []
-    found = []
-    for it in reversed(shots[-count * 2:]):
-        try:
-            uri = thumbnail(it["key_file"], 200)
-        except Exception:
-            uri = None
-        if uri:
-            found.append(uri)
-        if len(found) == count:
-            break
-    return found
+            "photos": photos, "videos": videos}
 
 
 def day_label(rel):
