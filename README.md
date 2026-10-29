@@ -50,12 +50,16 @@ anyway**. The one-line install avoids this.
 
 ## How to use
 
-Open ShotLoft and pick a tool.
+**On a Mac**, ShotLoft lives in the menu bar: click its aperture icon for a panel with your card,
+your backup drive and the tools. It opens at login (switch that off under ⋯ in the panel), and when
+you put in a card with new photos it tells you, and puts a dot on the icon.
+**On Windows and Linux**, open ShotLoft and pick a tool.
 
 ### Card Backup
 
 1. Put the memory card in, and connect the drive you back up to.
-2. Click **Card Backup**, then **Choose backup folder** (only the first time).
+2. Click **Card Backup** (on a Mac, the menu bar icon), then **Choose backup folder** (only the
+   first time).
 3. Click **Back up**. Only new photos and videos are copied.
 4. Before formatting the card, click **Check it's safe to format**. Then click **Eject card**.
 
@@ -81,7 +85,7 @@ Camera Backup/                      ← the folder you chose
 
 1. On the camera, shoot with **Continuous Bracket (BRK C)** in **RAW**, for example 3 shots at
    ±2 EV.
-2. Click **HDR Merge** and choose a folder. Your backup folder works: every folder inside it is
+2. Click **HDR Merge** (on a Mac, it opens in its own window) and choose a folder. Your backup folder works: every folder inside it is
    searched.
 3. Tick the bracketed sets it finds, and click **Merge to HDR**. Each takes about 30 seconds.
 
@@ -92,7 +96,7 @@ folder next to the shots). The original shots are never changed.
 
 | Part | Built with |
 |---|---|
-| App window | [pywebview](https://pywebview.flowrl.com/) (WebKit on Mac, WebView2 on Windows; the browser on Linux), one HTML page |
+| App window | Mac: a menu bar panel on Liquid Glass ([PyObjC](https://pyobjc.readthedocs.io/): AppKit, WebKit). Windows: [pywebview](https://pywebview.flowrl.com/) (WebView2). Linux: the browser. One HTML page in all of them |
 | Backup engine | Python standard library: EXIF reading, content fingerprints, byte-by-byte verify |
 | HDR merge | [NumPy](https://numpy.org/), [rawpy](https://github.com/letmaik/rawpy) ([LibRaw](https://www.libraw.org/)), [Pillow](https://python-pillow.org/): noise-weighted RAW merge, alignment, ghost removal, exposure fusion |
 | Packaging | [PyInstaller](https://pyinstaller.org/), with one-line installers in Bash and PowerShell |

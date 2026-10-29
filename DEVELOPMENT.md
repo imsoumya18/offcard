@@ -3,23 +3,27 @@
 [![Build](https://img.shields.io/github/actions/workflow/status/imsoumya18/shotloft/build.yml?branch=main&label=build)](https://github.com/imsoumya18/shotloft/actions/workflows/build.yml)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-008787)](https://www.python.org/)
 
-ShotLoft is a desktop app made of four parts. User-facing docs are in the [README](README.md).
+ShotLoft is a desktop app made of five parts. User-facing docs are in the [README](README.md).
 
 | Part | What it is |
 |---|---|
 | [`shotloft.py`](shotloft.py) | The app: opens the window and serves the page and its actions |
 | [`ui/index.html`](ui/index.html) | The window's contents: one page of HTML, CSS and JavaScript |
+| [`menubar.py`](menubar.py) | macOS only: the menu bar icon, its Liquid Glass panel and the HDR Merge window (PyObjC) |
 | [`engine.py`](engine.py) | The engine: card detection, matching, copying, repairs, verify, eject, finding bracket sets. Standard library only, Python 3.8+ |
 | [`hdr.py`](hdr.py) | HDR merge of one bracket set. Needs NumPy, rawpy (LibRaw) and Pillow, which the built app bundles |
 
 ## Run from source
 
 ```bash
-pip install pywebview                 # once, for the native window (Mac and Windows)
+pip install pywebview                 # once: the Windows window, and AppKit/WebKit on a Mac
+pip install pyobjc-framework-ServiceManagement pyobjc-framework-UserNotifications  # Mac: login item, notifications
 pip install numpy rawpy pillow        # once, for HDR merge (the app says so if they're missing)
-python3 shotloft.py            # open the app
+python3 shotloft.py            # open the app (on a Mac: in the menu bar)
+python3 shotloft.py --window   # Mac: the old full window instead of the menu bar
 python3 shotloft.py --browser  # open it in the browser instead
 python3 shotloft.py --serve    # no window; print the URL and token (tests)
+SHOTLOFT_OPEN_PANEL=1 python3 shotloft.py   # Mac: open the panel at launch (development)
 ```
 
 ## How the app works
@@ -38,7 +42,20 @@ python3 shotloft.py --serve    # no window; print the URL and token (tests)
 - **Views.** The page opens on a list of tools (`TOOLS` in `ui/index.html`); each tool is a view,
   selected by the URL hash (`#backup`, `#hdr`). A new tool is a new entry there, a view, and its
   API routes.
-- **Window.** On macOS and Windows the page opens in a native window
+- **Menu bar (macOS).** `menubar.py` runs the app as an accessory (no Dock icon; `LSUIElement`
+  in the built app). Its status item opens a borderless panel whose background is Liquid Glass
+  (`NSGlassEffectView`, macOS 26+; the frosted `NSVisualEffectView` before that). The page shows in
+  a transparent `WKWebView` in its compact `?view=pop` layout and reports its height, so the panel
+  fits its content. HDR Merge opens a glass window (`?view=window#hdr`). `shotloft.py` passes the
+  native layer a few hooks (`NATIVE`) and offers `/api/open-dest`, `/api/hdr/open`, `/api/login`
+  and `/api/quit`.
+  - A background thread watches for cards: a new one is checked straight away, and if it has new
+    files the app posts a notification and the icon gets a dot. While copying, the icon is a
+    progress ring. The page reuses that check (`plan_for` in `/api/state`) instead of reading the
+    card again.
+  - "Open at login" uses `SMAppService` and works for the installed app; it's turned on once, at
+    first launch.
+- **Window.** On Windows (and on a Mac with `--window`) the page opens in a native window
   ([pywebview](https://pywebview.flowrl.com/), using the system web view: WebKit on Mac, Edge
   WebView2 on Windows). On Linux, or if that window can't start, it opens in the default browser
   and quits about 45 seconds after the page is closed.
@@ -199,6 +216,7 @@ global roll-off, for editing.
   - `--hdr-selftest`: the merge itself, inside that app (so a built app's bundled libraries are
     checked too), on synthetic frames: alignment, shadow noise, and a window recovered from the
     dark frame (`python3 hdr.py selftest` runs the same test from source)
+  - `--menubar-check` (Mac): the menu bar layer loads inside that app and draws its icons
 
 ```bash
 python3 tests/smoke_test.py python3 engine.py      # the engine
@@ -214,6 +232,7 @@ Test hooks:
 | `SHOTLOFT_TEST_FREE_BYTES` | Fakes the free space on the backup drive |
 | `SHOTLOFT_UPDATE_URL` | Uses this URL for the update check |
 | `SHOTLOFT_URL_FILE` | Writes the `--serve` URL to a file, for windowed builds without a console |
+| `SHOTLOFT_OPEN_PANEL` | Mac: opens the menu bar panel at launch |
 
 ## Former name (Sony Import)
 

@@ -76,6 +76,71 @@
   .opt input { accent-color: var(--accent); }
   button:disabled { opacity: .45; cursor: default; }
   button.go { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+  /* ---- menu bar panel ("pop") and HDR window ("win"): drawn on Liquid Glass, so the page is clear */
+  html.glass, html.glass body { background: transparent; }
+  html.glass {
+    --text: rgba(0,0,0,.86); --muted: rgba(0,0,0,.52); --faint: rgba(0,0,0,.34); --line: rgba(0,0,0,.08);
+    --tile: rgba(255,255,255,.38); --tile-hover: rgba(255,255,255,.62); --accent: #007a79; --accent-2: #00a19e;
+    --accent-soft: rgba(0,135,135,.14); --panel: rgba(255,255,255,.42); --soft: rgba(0,0,0,.06); --bg: transparent;
+    --good-soft: rgba(31,122,31,.12); --bad-soft: rgba(192,60,60,.12);
+  }
+  @media (prefers-color-scheme: dark) {
+    html.glass {
+      --text: rgba(255,255,255,.93); --muted: rgba(255,255,255,.58); --faint: rgba(255,255,255,.36); --line: rgba(255,255,255,.1);
+      --tile: rgba(255,255,255,.07); --tile-hover: rgba(255,255,255,.13); --accent: #38c6c2; --accent-2: #1aa3a3;
+      --accent-soft: rgba(56,198,194,.16); --panel: rgba(255,255,255,.06); --soft: rgba(255,255,255,.08);
+      --good-soft: rgba(76,187,76,.16); --bad-soft: rgba(239,118,118,.16);
+    }
+  }
+  html.glass body { font: 13px/1.42 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; -webkit-font-smoothing: antialiased; user-select: none; -webkit-user-select: none; }
+  #pop { padding: 12px 12px 8px; color: var(--text); }
+  .p-head { display: flex; align-items: center; gap: 8px; padding: 2px 4px 10px; }
+  .p-head img { width: 20px; height: 20px; border-radius: 5px; }
+  .p-head .t { font-weight: 600; font-size: 13px; letter-spacing: -.01em; flex: 1; }
+  .p-head .v { color: var(--faint); font-size: 11px; font-weight: 400; margin-left: 4px; }
+  .p-icon { width: 26px; height: 26px; border-radius: 7px; border: 0; background: transparent; color: var(--muted); display: grid; place-items: center; padding: 0; cursor: default; }
+  .p-icon:hover, .p-icon.on { background: var(--tile-hover); color: var(--text); }
+  .hero { background: var(--tile); border-radius: 14px; padding: 14px; box-shadow: inset 0 0 0 .5px var(--line); }
+  .hero-top { display: flex; gap: 12px; align-items: center; }
+  .chip { width: 46px; height: 46px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; flex: none; }
+  .hero h3 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hero .s { color: var(--muted); font-size: 12px; margin-top: 1px; }
+  .hero .s.good { color: var(--good); } .hero .s.bad { color: var(--bad); }
+  .ring { margin-left: auto; flex: none; }
+  .ring circle { fill: none; stroke-width: 3.2; }
+  .ring .bg { stroke: var(--soft); } .ring .fg { stroke: var(--accent); stroke-linecap: round; transition: stroke-dashoffset .5s ease; transform: rotate(-90deg); transform-origin: 50% 50%; }
+  .ring text { font-size: 10px; font-weight: 600; fill: var(--text); font-variant-numeric: tabular-nums; }
+  .ring.spin .fg { animation: spin 1.1s linear infinite; transform-origin: 50% 50%; }
+  @keyframes spin { to { transform: rotate(270deg); } }
+  .go { margin-top: 12px; width: 100%; height: 34px; border: 0; border-radius: 10px; color: #fff; font: 600 13px -apple-system, system-ui; letter-spacing: -.005em; cursor: default;
+        background: linear-gradient(180deg, var(--accent-2), var(--accent)); box-shadow: 0 1px 0 rgba(255,255,255,.22) inset, 0 1px 2px rgba(0,0,0,.18); }
+  .go:hover { filter: brightness(1.06); } .go:active { filter: brightness(.94); transform: scale(.995); }
+  .pbar { height: 5px; border-radius: 3px; background: var(--soft); overflow: hidden; margin-top: 12px; }
+  .pbar > div { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--accent-2), var(--accent)); transition: width .5s ease; }
+  .meta { display: flex; justify-content: space-between; color: var(--muted); font-size: 11.5px; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .grp { margin-top: 10px; }
+  .grp .h { color: var(--faint); font-size: 11px; font-weight: 500; padding: 0 6px 4px; }
+  .rows { background: var(--tile); border-radius: 12px; box-shadow: inset 0 0 0 .5px var(--line); overflow: hidden; }
+  .r { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: default; }
+  .r + .r { box-shadow: 0 -.5px 0 var(--line); }
+  button.r:hover { background: var(--tile-hover); }
+  .r .i { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; color: var(--accent); background: var(--accent-soft); flex: none; }
+  .r .x { flex: 1; min-width: 0; } .r .x div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .r .x .d { color: var(--muted); font-size: 11.5px; }
+  .r .e { color: var(--muted); font-size: 12px; white-space: nowrap; display: flex; align-items: center; gap: 4px; }
+  .sw { width: 30px; height: 18px; border-radius: 9px; background: var(--soft); position: relative; transition: background .2s; flex: none; }
+  .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: transform .2s; }
+  .sw.on { background: var(--accent-2); } .sw.on::after { transform: translateX(12px); }
+  .note { border-radius: 10px; padding: 8px 10px; margin-top: 10px; font-size: 12px; }
+  .note.good { background: var(--good-soft); } .note.bad { background: var(--bad-soft); } .note.info { background: var(--accent-soft); }
+  .p-foot { display: flex; justify-content: space-between; padding: 10px 6px 2px; }
+  .p-foot button { border: 0; background: none; padding: 2px 0; font: inherit; font-size: 12px; color: var(--accent); cursor: default; }
+  .p-foot button.q { color: var(--muted); } .p-foot button:hover { text-decoration: underline; }
+  html.glass.window main { padding-top: 46px; }  /* under the window's transparent title bar, which names the tool */
+  html.glass.window header { display: none; }
+  html.glass.window .box, html.glass.window .set, html.glass.window .panel { background: var(--tile); border-color: var(--line); }
+  html.glass.window .box.drop { border-color: var(--accent); }
+  html.glass.window .set.on { border-color: var(--accent); }
   code { font-size: 12px; background: var(--soft); padding: 2px 5px; border-radius: 5px; word-break: break-all; }
 </style>
 </head>
@@ -102,6 +167,7 @@
     <div id="hdrmain"></div>
   </section>
 </main>
+<div id="pop" hidden></div>
 <script>
 const TOKEN = "__TOKEN__";
 let S = null, planKey = null, flash = null, busy = false;
@@ -194,12 +260,15 @@ function renderMain() { put("main", mainHtml()); }
 function mainHtml() {
   const j = S.job;
   const ready = S.cards.length && S.dest && S.dest_drive_connected;
-  const key = JSON.stringify([S.cards.map(c => c.path), S.dest]);
+  const key = JSON.stringify([S.cards.map(c => c.path).sort(), S.dest]);
   if (!ready) { return `<p class="wait">${!S.cards.length ? "Waiting for a memory card…" : !S.dest ? "Choose where your backup should go." : "Waiting for the backup drive…"}</p>`; return; }
   if (key !== planKey && (!j || j.state !== "running")) {
     planKey = key;
-    api("/api/plan", {}).then(refresh).catch(e => setFlash("bad", esc(e.message)));
-    return bar(null, "Checking what's new");
+    // The menu bar may have checked this card already: reuse that instead of reading it again.
+    if (!(j && j.kind === "plan" && j.state === "done" && JSON.stringify(S.plan_for) === key)) {
+      api("/api/plan", {}).then(refresh).catch(e => setFlash("bad", esc(e.message)));
+      return bar(null, "Checking what's new");
+    }
   }
   if (!j) return bar(null, "Checking what's new");
   if (j.state === "error") return `<div class="msg bad">${esc(j.error)}</div><button onclick="retry()">Try again</button>`;
@@ -355,8 +424,134 @@ function renderHdr() {
   put("hdrmain", html);
 }
 
+// ---------------------------------------------------------------- menu bar panel (macOS, view=pop)
+// The panel is a transparent page on Liquid Glass; menubar.py sizes the panel to this page's height.
+const MODE = new URLSearchParams(location.search).get("view") || "";
+if (MODE) document.documentElement.classList.add("glass", MODE);
+const ICO = {
+  card: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M8 2.75h7.5L19.25 6.5v13.25a1.5 1.5 0 0 1-1.5 1.5H6.25a1.5 1.5 0 0 1-1.5-1.5V6l3.25-3.25Z"/><path d="M9 3v3.2M11.5 3v3.2M14 3v3.2" stroke-linecap="round"/><rect x="7.75" y="11.5" width="8.5" height="6" rx="1.2" fill="currentColor" fill-opacity=".18" stroke="none"/></svg>`,
+  cardOut: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.4 2.2" stroke-linejoin="round"><path d="M8 2.75h7.5L19.25 6.5v13.25a1.5 1.5 0 0 1-1.5 1.5H6.25a1.5 1.5 0 0 1-1.5-1.5V6l3.25-3.25Z"/></svg>`,
+  folder: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 0 1 2-2h3.6l2 2.2h7.4a2 2 0 0 1 2 2v7.8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2V7.5Z"/></svg>`,
+  drive: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="3"/><circle cx="16.5" cy="12" r="1.2" fill="currentColor" stroke="none"/></svg>`,
+  shield: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M12 3.5 19 6v5.5c0 4.2-3 7.4-7 9-4-1.6-7-4.8-7-9V6l7-2.5Z"/><path d="m9 12 2.2 2.2L15.5 10"/></svg>`,
+  eject: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M12 5 5 13h14l-7-8Z"/><path d="M5 18h14"/></svg>`,
+  trash: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/></svg>`,
+  stack: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="9" width="12" height="12" rx="2.5"/><path d="M7 5.5h11.5a2 2 0 0 1 2 2V17" opacity=".55"/></svg>`,
+  power: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v8"/><path d="M6.4 6.6a8 8 0 1 0 11.2 0"/></svg>`,
+  gear: `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="18.5" cy="12" r="1.9"/></svg>`,
+  chev: `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></svg>`,
+};
+let popSettings = false;
+function ring(frac, spin) {
+  const c = 2 * Math.PI * 16, off = c * (1 - Math.max(0, Math.min(frac || 0, 1)));
+  return `<svg class="ring${spin ? " spin" : ""}" width="40" height="40" viewBox="0 0 40 40"><circle class="bg" cx="20" cy="20" r="16"/>
+    <circle class="fg" cx="20" cy="20" r="16" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${(spin ? c * .72 : off).toFixed(1)}"/>
+    ${spin ? "" : `<text x="20" y="23.5" text-anchor="middle">${Math.floor((frac || 0) * 100)}</text>`}</svg>`;
+}
+const row = (icon, title, detail, end, onclick) => `<${onclick ? `button class="r" onclick="${onclick}"` : `div class="r"`}>
+  <span class="i">${icon}</span><span class="x"><div>${title}</div>${detail ? `<div class="d">${detail}</div>` : ""}</span>
+  ${end ? `<span class="e">${end}</span>` : ""}</${onclick ? "button" : "div"}>`;
+const openHdr = () => act(() => api("/api/hdr/open", {}));
+const openDest = () => act(() => api("/api/open-dest", {}));
+const quitApp = () => api("/api/quit", {}).catch(() => {});
+const setLogin = on => act(() => api("/api/login", { enabled: on }));
+window.onPanelOpen = () => refresh();
+
+function popHero() {
+  const j = S.job, card = S.cards[0];
+  const hero = (icon, title, sub, subCls, extra, right) => `<div class="hero"><div class="hero-top"><div class="chip">${icon}</div>
+    <div style="min-width:0;flex:1"><h3>${title}</h3><div class="s ${subCls || ""}">${sub}</div></div>${right || ""}</div>${extra || ""}</div>`;
+  if (!S.dest) return hero(ICO.folder, "Choose a backup folder", "Where your photos and videos will go.", "", `<button class="go" onclick="pick()">Choose folder</button>`);
+  if (!S.dest_drive_connected) return hero(ICO.drive.replace(/14/g, "24"), `${esc(S.dest_drive)} isn't connected`, "Plug in your backup drive to continue.", "bad");
+  if (!card) return hero(ICO.cardOut, "Insert a memory card", "ShotLoft notices it by itself.", "");
+  const name = esc(card.name) + (S.cards.length > 1 ? ` <span style="color:var(--faint);font-weight:400">+${S.cards.length - 1}</span>` : "");
+  const key = JSON.stringify([S.cards.map(c => c.path).sort(), S.dest]);
+  if (key !== planKey && (!j || j.state !== "running")) {
+    planKey = key;
+    const fresh = j && j.kind === "plan" && j.state === "done" && JSON.stringify(S.plan_for) === key;
+    if (!fresh) api("/api/plan", {}).then(refresh).catch(e => setFlash("bad", esc(e.message)));
+  }
+  if (!j || (j.kind === "plan" && j.state === "running")) {
+    const p = j && j.progress;
+    return hero(ICO.card, name, p ? `Checking what's new · ${p.done} of ${p.total} files` : "Checking what's new…", "", "", ring(p ? p.done / Math.max(p.total, 1) : 0, !p));
+  }
+  if (j.state === "error") return hero(ICO.card, name, esc(j.error), "bad", `<button class="go" onclick="retry()">Try again</button>`);
+  const p = j.progress, r = j.result;
+  if (j.state === "running" && j.kind === "import") {
+    const frac = p ? p.done / Math.max(p.total, 1) : 0;
+    const left = p && p.elapsed > 2 && p.done && p.done < p.total ? ` · ${secs((p.total - p.done) / (p.done / p.elapsed))} left` : "";
+    return hero(ICO.card, name, p ? `Copying ${p.files_done} of ${p.files_total} files${left}` : "Starting…", "",
+      `<div class="pbar"><div style="width:${(frac * 100).toFixed(1)}%"></div></div><div class="meta"><span>${p ? `${human(p.done)} of ${human(p.total)}` : ""}</span><span>${Math.floor(frac * 100)}%</span></div>`, ring(frac));
+  }
+  if (j.state === "running" && j.kind === "verify") {
+    const frac = p ? p.done / Math.max(p.total, 1) : 0;
+    return hero(ICO.card, name, "Checking every file, byte by byte", "", `<div class="pbar"><div style="width:${(frac * 100).toFixed(1)}%"></div></div>`, ring(frac, !p));
+  }
+  if (j.kind === "plan") {
+    if (!r.new_files) return hero(ICO.card, name, "Everything is backed up", "good", "", "");
+    const what = sentence(r.new_photos, r.new_videos, r.new_xml);
+    if (!r.enough_space) return hero(ICO.card, name, `${what} · not enough space on the backup drive`, "bad");
+    return hero(ICO.card, name, `${counts(r.new_photos, r.new_videos, r.new_xml)} new · ${human(r.needed_bytes)}`, "",
+      `<button class="go" onclick="backup()">Back up ${what}</button>`);
+  }
+  if (j.kind === "import") return hero(ICO.card, name, r.errors.length ? `${plural(r.errors.length, "file")} couldn't be copied` : `Backed up ${sentence(r.photos, r.videos, r.xml)}${r.seconds >= 1 ? " in " + secs(r.seconds) : ""}`,
+    r.errors.length ? "bad" : "good", r.errors.length ? `<button class="go" onclick="retry()">Try again</button>` : "");
+  if (j.kind === "verify") {
+    const bad = r.cards.reduce((n, c) => n + c.missing.length + c.different.length, 0);
+    return hero(ICO.card, name, bad ? `${plural(bad, "file")} not safely backed up. Don't format yet.` : "Safe to format in your camera", bad ? "bad" : "good");
+  }
+  return hero(ICO.card, name, "");
+}
+
+function popHtml() {
+  const j = S.job, card = S.cards[0];
+  let html = `<div class="p-head"><img src="/icon.png" alt=""><span class="t">ShotLoft<span class="v">v${esc(S.version)}</span></span>
+    <button class="p-icon${popSettings ? " on" : ""}" aria-label="Settings" onclick="popSettings = !popSettings; render()">${ICO.gear}</button></div>`;
+  html += popHero();
+  if (flash && Date.now() - flash.t < 15000) html += `<div class="note ${flash.kind}">${flash.html}</div>`;
+  if (S.update) html += `<div class="note info"><b>v${esc(S.update.latest)} is out.</b> Run the install line again to update.</div>`;
+  const idle = !j || j.state !== "running";
+  const done = j && j.state === "done" && card && ((j.kind === "plan" && !j.result.new_files) || j.kind === "import" || j.kind === "verify");
+  if (done && idle) {
+    let rows = j.kind !== "verify" ? row(ICO.shield, "Check it's safe to format", "Every file, byte by byte", ICO.chev, "verify()") : "";
+    if (j.kind === "import" && j.result.raw_jpg_pairs) rows += row(ICO.trash, `Move ${plural(j.result.raw_jpg_pairs, "extra JPG")} to the ${esc(S.trash_name)}`, "Shot as RAW + JPG", ICO.chev, "trash()");
+    rows += row(ICO.eject, "Eject card", "", ICO.chev, "eject()");
+    html += `<div class="grp"><div class="h">Card</div><div class="rows">${rows}</div></div>`;
+  }
+  if (S.dest) {
+    const drive = (S.dest_drive || "").split(/[\\/]/).filter(Boolean).pop() || "This computer";
+    const where = S.dest.split(/[\\/]/).filter(Boolean).slice(-2).join(" / ");
+    html += `<div class="grp"><div class="h">Backup drive</div><div class="rows">${row(ICO.drive, esc(drive),
+      esc(where) + (S.dest_drive_connected ? (S.free_bytes != null ? ` · ${human(S.free_bytes)} free` : "") : " · not connected"),
+      popSettings ? "Change" : "", popSettings ? "pick()" : "")}</div></div>`;
+  }
+  html += `<div class="grp"><div class="h">Tools</div><div class="rows">${row(ICO.stack, "HDR Merge",
+      S.hdr_job && S.hdr_job.state === "running" ? (S.hdr_job.kind === "merge" ? "Merging…" : "Looking for brackets…") : "Blend bracketed shots", ICO.chev, "openHdr()")}</div></div>`;
+  if (popSettings) {
+    const li = S.login_item;
+    html += `<div class="grp"><div class="h">Settings</div><div class="rows">${row(ICO.power, "Open at login",
+      li === null ? "For the installed app in Applications" : "So ShotLoft notices cards", li === null ? "" : `<span class="sw${li ? " on" : ""}"></span>`, li === null ? "" : `setLogin(${!li})`)}</div></div>`;
+  }
+  html += `<div class="p-foot"><button onclick="openDest()">Open backup folder</button><button class="q" onclick="quitApp()">Quit ShotLoft</button></div>`;
+  return html;
+}
+let popH = 0;
+function renderPop() {
+  document.querySelector("main").hidden = true;
+  const el = document.getElementById("pop");
+  el.hidden = false;
+  put("pop", popHtml());
+  const h = Math.ceil(el.getBoundingClientRect().height);
+  if (h !== popH && window.webkit && window.webkit.messageHandlers.shotloft) {
+    popH = h;
+    window.webkit.messageHandlers.shotloft.postMessage(JSON.stringify({ type: "size", height: h }));
+  }
+}
+
 function render() {
   if (!S) return;
+  if (MODE === "pop") return renderPop();
+  if (MODE === "window" && location.hash !== "#hdr") location.hash = "hdr";
   document.getElementById("ver").textContent = "v" + S.version;
   document.getElementById("update").innerHTML = S.update ? `<div class="msg info"><b>A new version is available: v${esc(S.update.latest)}.</b> To update, run this line in ${navigator.platform.startsWith("Win") ? "PowerShell" : "Terminal"}:<br><code>${esc(S.update.line)}</code></div>` : "";
   document.getElementById("flash").innerHTML = flash && Date.now() - flash.t < 15000 ? `<div class="msg ${flash.kind}">${flash.html}</div>` : "";
