@@ -117,15 +117,6 @@ def main():
         out = open(urlfile).read() if os.path.exists(urlfile) else r.stdout
         if r.returncode != 0 or out.strip() != "PASS":
             sys.exit(f"FAIL: HDR self-test: {out.strip() or r.stderr[-2000:]}")
-
-        # On a Mac, the menu bar layer loads and draws its icons inside this app.
-        if sys.platform == "darwin":
-            if os.path.exists(urlfile):
-                os.remove(urlfile)
-            r = subprocess.run(tool + ["--menubar-check"], env=env, capture_output=True, text=True, timeout=120)
-            out = open(urlfile).read() if os.path.exists(urlfile) else r.stdout
-            if r.returncode != 0 or out.strip() != "PASS":
-                sys.exit(f"FAIL: menu bar check: {out.strip() or r.stderr[-2000:]}")
     print("PASS")
 
 

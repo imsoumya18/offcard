@@ -96,7 +96,8 @@ folder next to the shots). The original shots are never changed.
 
 | Part | Built with |
 |---|---|
-| App window | Mac: a menu bar panel on Liquid Glass ([PyObjC](https://pyobjc.readthedocs.io/): AppKit, WebKit). Windows: [pywebview](https://pywebview.flowrl.com/) (WebView2). Linux: the browser. One HTML page in all of them |
+| Mac app | Native [SwiftUI](https://developer.apple.com/xcode/swiftui/) menu bar app on Liquid Glass, with the Python engine inside |
+| Windows and Linux | One HTML page: in a [pywebview](https://pywebview.flowrl.com/) (WebView2) window on Windows, in the browser on Linux |
 | Backup engine | Python standard library: EXIF reading, content fingerprints, byte-by-byte verify |
 | HDR merge | [NumPy](https://numpy.org/), [rawpy](https://github.com/letmaik/rawpy) ([LibRaw](https://www.libraw.org/)), [Pillow](https://python-pillow.org/): noise-weighted RAW merge, alignment, ghost removal, exposure fusion |
 | Packaging | [PyInstaller](https://pyinstaller.org/), with one-line installers in Bash and PowerShell |

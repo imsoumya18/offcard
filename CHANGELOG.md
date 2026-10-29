@@ -5,6 +5,12 @@ when a new version is out.
 
 ShotLoft was called **Sony Import** up to v2.0.0.
 
+## [Unreleased]
+
+- **A native Mac app.** The menu bar panel and the HDR Merge window are rebuilt in SwiftUI, with
+  the system's Liquid Glass, SF Symbols and Mac controls throughout, and HDR Merge shows your
+  bracketed sets as a grid of previews.
+
 ## [2.3.0] - 2026-10-29
 
 - **ShotLoft moves to the menu bar on the Mac.** Click the aperture icon for a panel on Liquid

@@ -135,11 +135,11 @@ case "$(uname -s)" in
     fi
 
     printf '\n  %s✓ ShotLoft %s is installed.%s\n\n' "$GREEN" "${version}" "$OFF"
-    say "Open it from your Applications folder or Launchpad: ${TEAL}ShotLoft${OFF}"
+    say "It lives in your menu bar: click the ${TEAL}aperture icon${OFF} at the top of the screen."
     say "${DIM}To update later, run the same command again.${OFF}"
     echo
     if [ -z "${SHOTLOFT_NO_REVEAL:-}" ]; then
-      open -R "$app" 2>/dev/null || true   # show it in Finder
+      open "$app" 2>/dev/null || true   # start it, so its icon appears in the menu bar
     fi
     ;;
 

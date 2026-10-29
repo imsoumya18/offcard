@@ -56,7 +56,6 @@ except ImportError as _e:
     HDR, HDR_MISSING = None, f"HDR merge needs NumPy, rawpy and Pillow ({_e.name} is missing): pip install numpy rawpy pillow"
 TOKEN = secrets.token_urlsafe(24)
 WINDOW = None  # the pywebview window, when there is one
-NATIVE = {}    # the macOS menu bar layer (menubar.py) fills this with its actions while it runs
 
 
 # ---------------------------------------------------------------- state
@@ -219,7 +218,6 @@ def api_state(_):
         "hdr_folder_exists": bool(APP.hdr_folder and os.path.isdir(APP.hdr_folder)), "update": {"latest": newer, "line": E.INSTALL_LINE_WIN if E.IS_WIN else E.INSTALL_LINE}
                                   if newer else None,
         "can_pick": True, "plan_for": APP.plan_key,
-        "native": bool(NATIVE), "login_item": NATIVE["login"]() if NATIVE else None,
     }
 
 
@@ -453,73 +451,12 @@ def api_reveal(body):
     return {"opened": path}
 
 
-# ---------------------------------------------------------------- menu bar (macOS)
+# ---------------------------------------------------------------- card watcher (Mac app)
 
-def api_open_dest(_):
-    """Open the backup folder in Finder / File Explorer / the file manager."""
-    if not APP.dest or not os.path.isdir(APP.dest):
-        raise RuntimeError("Choose a backup folder first.")
-    if E.IS_MAC:
-        subprocess.Popen(["open", APP.dest])
-    elif E.IS_WIN:
-        os.startfile(APP.dest)
-    else:
-        subprocess.Popen(["xdg-open", APP.dest])
-    if NATIVE:
-        NATIVE["close_panel"]()
-    return {"opened": APP.dest}
-
-
-def api_open_hdr(_):
-    if not NATIVE:
-        raise RuntimeError("HDR Merge opens in its own window only in the menu bar app.")
-    NATIVE["open_hdr"]()
-    return {"opened": "hdr"}
-
-
-def api_login(body):
-    if not NATIVE or NATIVE["login"]() is None:
-        raise RuntimeError("Opening at login works for the installed app in Applications.")
-    on = NATIVE["login"](bool(body.get("enabled")))
-    E.save_config({**E.load_config(), "open_at_login": bool(on)})
-    return {"login_item": on}
-
-
-def api_quit(_):
-    if not NATIVE:
-        raise RuntimeError("Close the window to quit.")
-    NATIVE["quit"]()
-    return {"quitting": True}
-
-
-def icon_state():
-    """What the menu bar icon shows: ("copy", fraction) while copying, ("new", None) when a card has
-    files to back up, else ("idle", None)."""
-    j = APP.job
-    if j and j["kind"] == "import" and j["state"] == "running":
-        p = j["progress"] or {}
-        return ("copy", round(p.get("done", 0) / max(p.get("total", 1), 1), 2))
-    if (j and j["kind"] == "plan" and j["state"] == "done" and j["result"]["new_files"]
-            and APP.plan_key == [sorted(APP.cards()), APP.dest]):
-        return ("new", None)
-    return ("idle", None)
-
-
-def tooltip():
-    j, cards = APP.job, APP.cards()
-    if j and j["kind"] == "import" and j["state"] == "running":
-        return "ShotLoft: copying…"
-    if icon_state()[0] == "new":
-        r = j["result"]
-        what = ", ".join(x for x in (f"{r['new_photos']} new photos" if r["new_photos"] else "",
-                                     f"{r['new_videos']} new videos" if r["new_videos"] else "") if x) or "new files"
-        return f"ShotLoft: {os.path.basename(cards[0].rstrip('/'))} has {what}"
-    return "ShotLoft"
-
-
-def watch_cards(notify):
-    """Background: when a card goes in, check what's new on it, and notify if there's anything."""
-    seen, told = set(), set()
+def watch_cards():
+    """With --agent (the Mac menu bar app's engine): when a card goes in, check what's new on it
+    straight away, so the app can tell the user and show it the moment they open the panel."""
+    seen = set()
     while True:
         time.sleep(2)
         try:
@@ -530,39 +467,8 @@ def watch_cards(notify):
             drive = E.drive_of(APP.dest) if APP.dest else None   # None: on the internal disk, always there
             if new and not busy and APP.dest and (drive is None or os.path.isdir(drive)):
                 api_plan({})
-            j = APP.job
-            key = (tuple(sorted(cards)), APP.dest)
-            if (j and j["kind"] == "plan" and j["state"] == "done" and j["result"]["new_files"]
-                    and APP.plan_key == [sorted(cards), APP.dest] and key not in told):
-                told.add(key)
-                r = j["result"]
-                what = " and ".join(x for x in (f"{r['new_photos']} new photo{'s' * (r['new_photos'] != 1)}" if r["new_photos"] else "",
-                                                f"{r['new_videos']} new video{'s' * (r['new_videos'] != 1)}" if r["new_videos"] else "") if x)
-                notify(os.path.basename(cards[0].rstrip("/\\")) if cards else "Memory card",
-                       f"{what or 'New files'} to back up. Click the ShotLoft icon in the menu bar.")
-            told &= {key}
         except Exception:
             pass
-
-
-def run_menubar(url):
-    """The macOS menu bar app. Returns False if it can't start here (then a window opens instead)."""
-    try:
-        import menubar
-    except Exception as e:
-        print(f"Menu bar unavailable ({e}); opening a window instead.", file=sys.stderr, flush=True)
-        return False
-
-    def started():
-        cfg = E.load_config()
-        if "open_at_login" not in cfg and menubar.login_item() is not None:  # on by default, once
-            E.save_config({**cfg, "open_at_login": bool(menubar.login_item(True))})
-        threading.Thread(target=watch_cards, args=(menubar.notify,), daemon=True).start()
-
-    NATIVE.update(login=menubar.login_item, started=started, icon_state=icon_state, tooltip=tooltip,
-                  open_on_start=bool(os.environ.get("SHOTLOFT_OPEN_PANEL")))
-    menubar.run(url, NATIVE)
-    return True
 
 
 def api_reset(_):
@@ -577,9 +483,7 @@ ROUTES = {"/api/state": api_state, "/api/dest": api_set_dest, "/api/pick": api_p
           "/api/import": api_import, "/api/verify": api_verify, "/api/eject": api_eject,
           "/api/trash": api_trash, "/api/reset": api_reset, "/api/hdr/folder": api_hdr_folder,
           "/api/hdr/pick": api_hdr_pick, "/api/hdr/scan": api_hdr_scan, "/api/hdr/merge": api_hdr_merge,
-          "/api/hdr/sets": api_hdr_sets, "/api/hdr/open": api_open_hdr,
-          "/api/reveal": api_reveal, "/api/open-dest": api_open_dest, "/api/login": api_login,
-          "/api/quit": api_quit}
+          "/api/hdr/sets": api_hdr_sets, "/api/reveal": api_reveal}
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -649,19 +553,6 @@ def main():
     if "--version" in sys.argv:
         print(f"shotloft {E.__version__}")
         return 0
-    if "--menubar-check" in sys.argv:  # checks that the built Mac app can start in the menu bar (tests)
-        try:
-            import menubar
-            for img in (menubar.icon(), menubar.icon(dot=True), menubar.icon(progress=0.4)):
-                assert img.isTemplate()
-            out = "PASS"
-        except Exception as e:
-            out = f"menu bar: {e}"
-        print(out, flush=True)
-        if os.environ.get("SHOTLOFT_URL_FILE"):
-            with open(os.environ["SHOTLOFT_URL_FILE"], "w") as f:
-                f.write(out)
-        return 0 if out == "PASS" else 1
     if "--hdr-selftest" in sys.argv:  # checks that the built app can merge (tests; result also to a file)
         problems = [HDR_MISSING] if HDR is None else HDR.selftest()[0]
         out = "\n".join(problems) or "PASS"
@@ -675,6 +566,15 @@ def main():
     threading.Thread(target=server.serve_forever, daemon=True).start()
 
     if mode == "serve":
+        if "--agent" in sys.argv:  # the Mac menu bar app's engine: watch cards, and go when the app goes
+            threading.Thread(target=watch_cards, daemon=True).start()
+            parent = os.getppid()
+
+            def follow_parent():
+                while os.getppid() == parent:
+                    time.sleep(2)
+                os._exit(0)
+            threading.Thread(target=follow_parent, daemon=True).start()
         info = json.dumps({"url": url, "token": TOKEN})
         print(info, flush=True)
         if os.environ.get("SHOTLOFT_URL_FILE"):  # windowed builds have no console to print to
@@ -686,8 +586,6 @@ def main():
         except KeyboardInterrupt:
             return 0
 
-    if mode == "window" and E.IS_MAC and "--window" not in sys.argv and run_menubar(url):
-        return 0
     if mode == "window" and not (sys.platform.startswith("linux")):
         try:
             import webview

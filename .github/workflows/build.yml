@@ -56,10 +56,6 @@ jobs:
           # (newest LibRaw, so the newest cameras).
           RAWPY="rawpy==0.27.1"; [ "${{ matrix.os }}" = "macos-15-intel" ] && RAWPY="rawpy==0.25.1"
           pip install numpy==2.4.6 pillow==13.0.0 "$RAWPY"
-          # The Mac app lives in the menu bar (menubar.py): AppKit, WebKit, login item, notifications.
-          if [ "$RUNNER_OS" = "macOS" ]; then
-            pip install pywebview pyobjc-framework-ServiceManagement pyobjc-framework-UserNotifications
-          fi
 
       - name: Test the app from source
         run: |
@@ -70,22 +66,18 @@ jobs:
         shell: bash
         run: |
           pip install pyinstaller
-          # Native window on Mac and Windows; Linux opens the same page in the browser.
+          # Mac: a SwiftUI menu bar app with the engine inside (mac/build.sh). Windows: a native window
+          # (pywebview). Linux: the same page in the browser.
           if [ "$RUNNER_OS" = "Windows" ]; then pip install pywebview; fi
           SEP=":"; [ "$RUNNER_OS" = "Windows" ] && SEP=";"
           DATA=(--add-data "engine.py${SEP}." --add-data "hdr.py${SEP}." --add-data "ui${SEP}ui" --add-data "docs/icon.png${SEP}docs")
           case "$RUNNER_OS" in
             macOS)
-              pyinstaller --noconfirm --windowed --name "ShotLoft" --icon docs/AppIcon.icns \
-                --osx-bundle-identifier io.github.imsoumya18.shotloft "${DATA[@]}" shotloft.py
-              # Let the panel load the app's own page from 127.0.0.1 (local addresses only), keep it out
-              # of the Dock (a menu bar app), then re-sign.
-              PLIST="dist/ShotLoft.app/Contents/Info.plist"
-              /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" \
-                -c "Add :NSAppTransportSecurity:NSAllowsLocalNetworking bool true" \
-                -c "Add :LSUIElement bool true" "$PLIST"
-              codesign --force --deep -s - "dist/ShotLoft.app"
-              echo "APP=dist/ShotLoft.app/Contents/MacOS/ShotLoft" >> "$GITHUB_ENV" ;;
+              mac/build.sh dist
+              # The tests drive the engine inside the app; the app itself checks it can start it.
+              echo "APP=dist/ShotLoft.app/Contents/Resources/engine/ShotLoftEngine" >> "$GITHUB_ENV"
+              dist/ShotLoft.app/Contents/MacOS/ShotLoft --version
+              dist/ShotLoft.app/Contents/MacOS/ShotLoft --check ;;
             Windows)
               pyinstaller --noconfirm --windowed --onefile --name "ShotLoft" --icon docs/icon.ico "${DATA[@]}" shotloft.py
               echo "APP=dist/ShotLoft.exe" >> "$GITHUB_ENV" ;;
@@ -144,7 +136,8 @@ jobs:
             APP="$RUNNER_TEMP/apps/ShotLoft.app"
             test -f "$APP/Contents/Resources/AppIcon.icns"
             xattr -l "$APP" | grep -q quarantine && { echo "app is quarantined"; exit 1; }
-            python tests/app_test.py "$APP/Contents/MacOS/ShotLoft"
+            "$APP/Contents/MacOS/ShotLoft" --check
+            python tests/app_test.py "$APP/Contents/Resources/engine/ShotLoftEngine"
           else
             test -f "$HOME/.local/share/applications/shotloft.desktop"
             python tests/app_test.py "$RUNNER_TEMP/bin/shotloft"
