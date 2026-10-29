@@ -14,9 +14,7 @@
 
 [Install](#install) • [How to use](#how-to-use) • [Tech stack](#tech-stack) • [What's new](CHANGELOG.md)
 
-<a href="docs/launch.mp4"><img src="docs/launch.gif" alt="ShotLoft in the Mac menu bar: a card goes in, the panel shows what's new and the folders it goes into, Back Up fills a progress ring, then Safe to format" width="760"></a>
-
-<sub>23 seconds. <a href="docs/launch.mp4">Watch with sound</a>.</sub>
+<img src="docs/launch.gif" alt="ShotLoft in the Mac menu bar: a card goes in, the panel shows what's new and the folders it goes into, Back Up fills a progress ring, then Safe to format" width="760">
 
 </div>
 
