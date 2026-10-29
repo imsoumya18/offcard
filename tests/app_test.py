@@ -102,6 +102,8 @@ def main():
             assert st == 200, r
             res = wait("merge", key="hdr_job")
             assert res["merged"] == 0 and len(res["failed"]) == 1, res
+            assert not os.path.exists(os.path.join(dest, "2026", "3. March", "HDR")), "a failed merge left an HDR folder"
+            assert not os.path.exists(os.path.join(dest, "2026", "3. March", "01Mar26", "HDR")), "a failed merge left an HDR folder"
         finally:
             proc.terminate()
             try:

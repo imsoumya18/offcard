@@ -43,6 +43,7 @@ MONTHS = ["", "January", "February", "March", "April", "May", "June", "July",
 PHOTO_EXT = {".ARW", ".JPG", ".JPEG", ".HIF", ".HEIF"}
 SONY_DCIM_DIR = re.compile(r"^\d{3}(MSDCF|\d{5})$")
 NUM_WIDTH = 5
+PHOTOS_DIR, VIDEOS_DIR = "Photos", "Videos"  # inside each day folder
 CHUNK = 8 * 1024 * 1024
 
 
@@ -257,7 +258,7 @@ def video_datetime(mp4, xml):
 
 # ---------------------------------------------------------------- bracketed shots (HDR)
 
-HDR_DIR = "HDR"      # merged HDR photos go here, inside the day folder; never part of the backup index
+HDR_DIR = "HDR"      # merged HDR photos: <day>/HDR beside Photos and Videos; never part of the backup index
 BRACKET_GAP = 2.0    # most seconds between two frames of one bracket set
 BRACKET_SPAN = 1.0   # least EV between a set's darkest and brightest frame
 
@@ -278,6 +279,13 @@ def raw_files(folder):
         found += [os.path.join(dirpath, fn) for fn in sorted(filenames)
                   if not fn.startswith(".") and fn.upper().endswith(".ARW")]
     return found
+
+
+def hdr_folder(shots_dir):
+    """Where a set's HDR goes: in a day's Photos folder, the day's HDR folder (beside Photos and
+    Videos); anywhere else, an HDR folder next to the shots."""
+    parent, name = os.path.split(shots_dir)
+    return os.path.join(parent if name == PHOTOS_DIR else shots_dir, HDR_DIR)
 
 
 def find_brackets(folder, progress=None):
@@ -312,7 +320,7 @@ def find_brackets(folder, progress=None):
     def close():
         biases = [s["exif"]["bias"] for s in cur]
         if len(cur) >= 2 and max(biases) - min(biases) >= BRACKET_SPAN:
-            out = os.path.join(cur[0]["dir"], HDR_DIR, hdr_name([s["name"] for s in cur]))
+            out = os.path.join(hdr_folder(cur[0]["dir"]), hdr_name([s["name"] for s in cur]))
             sets.append({"files": [s["path"] for s in cur], "names": [s["name"] for s in cur],
                          "folder": cur[0]["dir"], "biases": [round(b, 1) for b in biases],
                          "taken": cur[0]["exif"]["taken"], "output": out, "done": os.path.exists(out)})
@@ -647,13 +655,13 @@ def build_plan(dest, cards):
         if it["kind"] == "video":
             video_n += 1
             base = f"C{video_n:0{NUM_WIDTH}d}"
-            it["targets"] = [os.path.join(folder, "Videos", base + (".MP4" if src.upper().endswith(".MP4")
-                                                                    else "M01.XML"))
+            it["targets"] = [os.path.join(folder, VIDEOS_DIR, base + (".MP4" if src.upper().endswith(".MP4")
+                                                                      else "M01.XML"))
                              for src in it["files"]]
         else:
             photo_n += 1
             base = f"DSC{photo_n:0{NUM_WIDTH}d}"
-            it["targets"] = [os.path.join(folder, base + os.path.splitext(s)[1].upper())
+            it["targets"] = [os.path.join(folder, PHOTOS_DIR, base + os.path.splitext(s)[1].upper())
                              for s in it["files"]]
             if it["kind"] == "pair":
                 it["pair"] = (it["targets"][1], it["targets"][0])
@@ -743,10 +751,38 @@ class Bar:
         return time.time() - self.start
 
 
+def make_dirs(folder):
+    """Create folder and any missing parents. Returns the ones created, deepest first, so a
+    failure can take them away again (remove_empty): ShotLoft never leaves an empty folder."""
+    made, p = [], os.path.abspath(folder)
+    while not os.path.isdir(p):
+        made.append(p)
+        p = os.path.dirname(p)
+    for d in reversed(made):
+        os.makedirs(d, exist_ok=True)
+    return made
+
+
+def remove_empty(dirs):
+    """Remove these folders, deepest first, while they're empty (macOS ._ metadata files don't count)."""
+    for d in dirs:
+        try:
+            names = os.listdir(d)
+            if any(not n.startswith("._") and n != ".DS_Store" for n in names):
+                return  # something real is in it: keep it, and its parents
+            for n in names:
+                os.remove(os.path.join(d, n))
+            os.rmdir(d)
+        except OSError:
+            return
+
+
 def copy_file(src, dst, progress):
-    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    made = make_dirs(os.path.dirname(dst))
     tmp = dst + ".partial"
     try:
+        if os.environ.get("SHOTLOFT_TEST_FAIL_COPY") == os.path.basename(src):
+            raise IOError("test: this copy fails")
         with open(src, "rb") as fi, open(tmp, "wb") as fo:
             while True:
                 buf = fi.read(CHUNK)
@@ -754,16 +790,16 @@ def copy_file(src, dst, progress):
                     break
                 fo.write(buf)
                 progress.update(len(buf))
-    except BaseException:  # includes Ctrl-C: never leave half-written files behind
+        st = os.stat(src)
+        os.utime(tmp, (st.st_atime, st.st_mtime))
+        if os.path.getsize(tmp) != st.st_size:
+            raise IOError(f"size mismatch copying {src}")
+        os.rename(tmp, dst)
+    except BaseException:  # includes Ctrl-C: never leave half-written files or empty folders behind
         if os.path.exists(tmp):
             os.remove(tmp)
+        remove_empty(made)
         raise
-    st = os.stat(src)
-    os.utime(tmp, (st.st_atime, st.st_mtime))
-    if os.path.getsize(tmp) != st.st_size:
-        os.remove(tmp)
-        raise IOError(f"size mismatch copying {src}")
-    os.rename(tmp, dst)
     progress.update(0, file_done=True)
 
 
@@ -966,7 +1002,7 @@ def counts(p, v, x=0):
 def item_folder(dest, it):
     """Day folder (relative) an item goes into."""
     folder = os.path.dirname(it["targets"][0])
-    if os.path.basename(folder) == "Videos":
+    if os.path.basename(folder) in (PHOTOS_DIR, VIDEOS_DIR):
         folder = os.path.dirname(folder)
     return os.path.relpath(folder, dest)
 

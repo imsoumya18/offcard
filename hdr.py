@@ -671,11 +671,23 @@ def merge_set(paths, out_path, tiff=False, progress=lambda f, s: None):
         frames.append(load_raw(p))
         progress(0.05 * (i + 1) / len(paths), "Reading")
     img, full, base, ref, info = merge_frames(frames, lambda f, s: progress(0.05 + 0.95 * f, s))
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    save_jpeg(img, out_path, frames[ref])
+    made = _engine().make_dirs(os.path.dirname(out_path))  # the HDR folder appears only with a result in it
+    try:
+        save_jpeg(img, out_path, frames[ref])
+    except BaseException:
+        if os.path.exists(out_path + ".partial"):
+            os.remove(out_path + ".partial")
+        _engine().remove_empty(made)
+        raise
     del img
     if tiff:
-        save_tiff16(tiff_image(full, base, frames[ref]), os.path.splitext(out_path)[0] + ".tif")
+        tif = os.path.splitext(out_path)[0] + ".tif"
+        try:
+            save_tiff16(tiff_image(full, base, frames[ref]), tif)
+        except BaseException:
+            if os.path.exists(tif + ".partial"):
+                os.remove(tif + ".partial")
+            raise
     info["seconds"] = round(time.time() - t0, 1)
     progress(1.0, "Done")
     return info

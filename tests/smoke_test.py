@@ -86,13 +86,13 @@ def make_card(root):
 
 
 EXPECTED = {
-    ("2026", "1. January", "05Jan26", "DSC00001.ARW"),
-    ("2026", "1. January", "05Jan26", "DSC00001.JPG"),
+    ("2026", "1. January", "05Jan26", "Photos", "DSC00001.ARW"),
+    ("2026", "1. January", "05Jan26", "Photos", "DSC00001.JPG"),
     ("2026", "1. January", "05Jan26", "Videos", "C00001.MP4"),
     ("2026", "1. January", "05Jan26", "Videos", "C00001M01.XML"),
-    ("2026", "2. February", "10Feb26", "DSC00002.ARW"),
-    ("2026", "2. February", "10Feb26", "DSC00003.ARW"),
-    ("2026", "2. February", "10Feb26", "DSC00004.ARW"),
+    ("2026", "2. February", "10Feb26", "Photos", "DSC00002.ARW"),
+    ("2026", "2. February", "10Feb26", "Photos", "DSC00003.ARW"),
+    ("2026", "2. February", "10Feb26", "Photos", "DSC00004.ARW"),
 }
 
 
@@ -113,10 +113,16 @@ def tree(dest):
     return got
 
 
+def empty_dirs(dest):
+    return [d for d, dirs, files in os.walk(dest) if not dirs and not files]
+
+
 def check_tree(dest, what):
     got = tree(dest)
     if got != EXPECTED:
         sys.exit(f"FAIL ({what}): unexpected backup tree\n  missing: {EXPECTED - got}\n  extra: {got - EXPECTED}")
+    if empty_dirs(dest):
+        sys.exit(f"FAIL ({what}): empty folders left: {empty_dirs(dest)}")
 
 
 def verify(tool, dest, card, expect):
@@ -130,11 +136,12 @@ def new_items(tool, dest, card):
 
 
 DAY = ("2026", "1. January", "05Jan26")
+PHOTOS = DAY + ("Photos",)
 # A file deleted from the backup -> the next run must put back exactly that file, same name.
 REPAIRS = [
     DAY + ("Videos", "C00001M01.XML"),   # video there, its XML missing
     DAY + ("Videos", "C00001.MP4"),      # XML there, its video missing
-    DAY + ("DSC00001.ARW",),             # JPG of a RAW+JPG pair there, RAW missing
+    PHOTOS + ("DSC00001.ARW",),          # JPG of a RAW+JPG pair there, RAW missing
 ]
 
 
@@ -156,6 +163,14 @@ def main():
         if os.path.exists(dest) and tree(dest):
             sys.exit("FAIL: files were copied although the drive was full")
 
+        # A copy that fails leaves no empty folder behind: not Videos for a failed video, not Photos
+        # for a failed RAW + JPG pair (a day gets a Photos, Videos or HDR folder only with files in it).
+        for fails, gone in (("C0001.MP4", "Videos"), ("DSC00010.JPG", "Photos")):
+            trial = os.path.join(tmp, "trial-" + gone)
+            run(tool + ["import", "--dest", trial, "--card", card], env={"SHOTLOFT_TEST_FAIL_COPY": fails}, expect=1)
+            if os.path.exists(os.path.join(trial, *DAY, gone)) or empty_dirs(trial):
+                sys.exit(f"FAIL: a failed copy of {fails} left a folder: {empty_dirs(trial) or gone}")
+
         run(tool + ["plan", "--dest", dest, "--card", card])
         run(tool + ["import", "--dest", dest, "--card", card])
         check_tree(dest, "first import")
@@ -166,7 +181,7 @@ def main():
         if verify(tool, dest, card, 0) != (True, 0, 0, 0, 7):
             sys.exit(f"FAIL: verify after import: {verify(tool, dest, card, 0)}")
         # One byte changed where the quick fingerprint doesn't look -> caught as different.
-        victim = os.path.join(dest, "2026", "2. February", "10Feb26", "DSC00002.ARW")
+        victim = os.path.join(dest, "2026", "2. February", "10Feb26", "Photos", "DSC00002.ARW")
         with open(victim, "r+b") as f:
             f.seek(100_000); b = f.read(1); f.seek(100_000); f.write(bytes([b[0] ^ 0xFF]))
         if verify(tool, dest, card, 1)[:3] != (False, 0, 1):
@@ -187,7 +202,7 @@ def main():
 
         # A single photo deleted -> copied back once (it has no partner to take a number from,
         # so it gets the next free number).
-        feb = os.path.join(dest, "2026", "2. February", "10Feb26")
+        feb = os.path.join(dest, "2026", "2. February", "10Feb26", "Photos")
         os.remove(os.path.join(feb, "DSC00003.ARW"))
         run(tool + ["import", "--dest", dest, "--card", card])
         if sorted(os.listdir(feb)) != ["DSC00002.ARW", "DSC00004.ARW", "DSC00005.ARW"]:
@@ -196,13 +211,19 @@ def main():
             sys.exit("FAIL: restored photo would be copied again")
 
         # Renamed in the backup -> still recognised, nothing copied.
-        os.rename(os.path.join(dest, *DAY, "DSC00001.ARW"), os.path.join(dest, *DAY, "renamed.ARW"))
+        os.rename(os.path.join(dest, *PHOTOS, "DSC00001.ARW"), os.path.join(dest, *PHOTOS, "renamed.ARW"))
         if new_items(tool, dest, card) != 0:
             sys.exit("FAIL: a renamed backup file was not recognised")
-        os.rename(os.path.join(dest, *DAY, "renamed.ARW"), os.path.join(dest, *DAY, "DSC00001.ARW"))
+        os.rename(os.path.join(dest, *PHOTOS, "renamed.ARW"), os.path.join(dest, *PHOTOS, "DSC00001.ARW"))
+
+        # Backups made before the Photos folder (photos straight in the day folder) still count.
+        os.rename(os.path.join(dest, *PHOTOS, "DSC00001.ARW"), os.path.join(dest, *DAY, "DSC00001.ARW"))
+        if new_items(tool, dest, card) != 0:
+            sys.exit("FAIL: a photo in the older layout (straight in the day folder) was not recognised")
+        os.rename(os.path.join(dest, *DAY, "DSC00001.ARW"), os.path.join(dest, *PHOTOS, "DSC00001.ARW"))
 
         # JPG of a RAW+JPG pair removed on purpose (the Trash option) -> not brought back.
-        os.remove(os.path.join(dest, *DAY, "DSC00001.JPG"))
+        os.remove(os.path.join(dest, *PHOTOS, "DSC00001.JPG"))
         if new_items(tool, dest, card) != 0:
             sys.exit("FAIL: a JPG that was removed on purpose would be copied again")
         if verify(tool, dest, card, 0)[:4] != (True, 0, 0, 1):
@@ -223,15 +244,21 @@ def main():
         day = os.path.join(root, "2026", "01Mar26")
         make_bracket_day(day)
         make_bracket_day(os.path.join(root, "copy"))
+        make_bracket_day(os.path.join(root, "2026", "02Mar26", "Photos"))  # backup layout: HDR beside Photos
         sets = json.loads(run(tool + ["brackets", "--folder", root, "--json"]))
         got = [(os.path.relpath(s["folder"], root), s["names"], s["biases"], os.path.basename(s["output"]), s["done"])
                for s in sets]
         one = ["DSC00100.ARW", "DSC00101.ARW", "DSC00102.ARW"], [0.0, -2.0, 2.0], "DSC00100-00102_HDR.jpg", False
         two = ["DSC00106.ARW", "DSC00107.ARW", "DSC00108.ARW"], [-3.0, 0.0, 3.0], "DSC00106-00108_HDR.jpg", False
         day_rel = os.path.join("2026", "01Mar26")
-        want = [(day_rel, *one), (day_rel, *two), ("copy", *one), ("copy", *two)]
+        photos_rel = os.path.join("2026", "02Mar26", "Photos")
+        want = [(day_rel, *one), (day_rel, *two), ("copy", *one), ("copy", *two),
+                (photos_rel, *one), (photos_rel, *two)]
         if sorted(got) != sorted(want):
             sys.exit(f"FAIL: bracket sets: {got}")
+        hdr_dirs = {os.path.relpath(os.path.dirname(s["output"]), root) for s in sets}
+        if hdr_dirs != {os.path.join(day_rel, "HDR"), os.path.join("copy", "HDR"), os.path.join("2026", "02Mar26", "HDR")}:
+            sys.exit(f"FAIL: HDR folders: {hdr_dirs}")
         write(os.path.join(day, "HDR", "DSC00100-00102_HDR.jpg"), b"x")
         done = {(os.path.relpath(s["folder"], root), s["names"][0]): s["done"]
                 for s in json.loads(run(tool + ["brackets", "--folder", root, "--json"]))}

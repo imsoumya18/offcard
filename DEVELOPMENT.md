@@ -73,6 +73,9 @@ python3 shotloft.py --serve    # no window; print the URL and token (tests)
 - **Dates.**
   - Photos: EXIF `DateTimeOriginal`, read by a small built-in parser, so no exiftool is needed.
   - Videos: the `CreationDate` in Sony's XML file.
+- **Layout.** `<backup>/YYYY/M. Month/DDMonYY/`, with photos in `Photos/`, videos (MP4 + XML)
+  in `Videos/`, and HDR Merge results in `HDR/` inside each day. Older backups have photos straight in the day folder;
+  they still count as backed up (matching ignores locations), and new photos go into `Photos/`.
 - **Duplicate check.** There is no database: the backup folder is scanned each run. Every card
   file is matched on its own, by size and a hash of three 64 KB samples (start, middle, end).
   Names and dates aren't used, so renamed files still match. Size alone isn't enough, because
@@ -145,7 +148,8 @@ exposure step into its EXIF (`ExposureBiasValue`), even in M mode. A set is cons
 in one folder (so copies of the same shots in two folders stay apart), at most 2 s apart, from the same camera at the same focal length, whose steps differ and span at
 least 1 EV. A step already in the set starts the next set. Bursts and white-balance or DRO
 brackets keep one exposure, so they never count. The result goes to
-`<its folder>/HDR/DSC00012-00014_HDR.jpg`, and the backup index skips `HDR` folders, so merges are never
+`<day>/HDR/DSC00012-00014_HDR.jpg`, beside `Photos` and `Videos` (for shots in any other folder,
+an `HDR` folder next to them), and the backup index skips `HDR` folders, so merges are never
 taken for backed-up files.
 
 **Merging** (`hdr.py`). Every choice below was tested on real a6600 brackets (handheld, ISO 250 and

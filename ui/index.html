@@ -329,7 +329,7 @@ function renderHdr() {
   let html = "";
   if (j && j.state === "error") html += `<div class="msg bad">${esc(j.error)}</div><button onclick="hdrScan()">Try again</button>`;
   if (j && j.state === "done" && j.kind === "merge" && j.result) {
-    if (j.result.merged) html += `<div class="msg good"><b>Saved ${plural(j.result.merged, "HDR photo")}</b> in the HDR folder next to the shots they came from.</div>`;
+    if (j.result.merged) html += `<div class="msg good"><b>Saved ${plural(j.result.merged, "HDR photo")}</b> in the day's HDR folder.</div>`;
     if (j.result.failed.length) html += `<div class="msg bad"><b>${plural(j.result.failed.length, "set")} couldn't be merged.</b><ul class="files">${j.result.failed.map(f => `<li>${esc(f.file)} <span class="sub">${esc(f.error)}</span></li>`).join("")}</ul></div>`;
   }
   if (H.sets === null) return put("hdrmain", html || `<p class="wait">Looking for bracketed shots…</p>`);

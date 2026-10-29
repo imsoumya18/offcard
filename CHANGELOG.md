@@ -5,6 +5,13 @@ when a new version is out.
 
 ShotLoft was called **Sony Import** up to v2.0.0.
 
+## [Unreleased]
+
+- **Photos get their own folder.** Each day folder now has `Photos`, `Videos` and, for HDR Merge
+  results, `HDR`.
+  Photos you already backed up stay where they are and are still recognised, so nothing is copied
+  twice.
+
 ## [2.2.0] - 2026-10-24
 
 - **A home for every tool.** ShotLoft now opens on its tools, **Card Backup** and **HDR Merge**,

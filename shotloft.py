@@ -266,8 +266,7 @@ def api_import(_):
     plan = APP.plan
 
     def run():
-        os.makedirs(plan["dest"], exist_ok=True)
-        rep = E.run_import(plan)
+        rep = E.run_import(plan)  # folders are made as files go into them, never empty
         APP.report, APP.plan = rep, None
         return report_summary(rep)
     return APP.start("import", run)
