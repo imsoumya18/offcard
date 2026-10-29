@@ -30,7 +30,7 @@ The Mac app (needs Xcode, and pyinstaller next to the libraries above):
 mac/build.sh dist                                  # dist/ShotLoft.app for this Mac's processor
 dist/ShotLoft.app/Contents/MacOS/ShotLoft --check  # its engine starts and answers
 SHOTLOFT_ENGINE="python3 $PWD/shotloft.py" dist/ShotLoft.app/Contents/MacOS/ShotLoft   # with the engine from source
-SHOTLOFT_DEV=1 ...                                 # skip the login item and notification set-up (test builds)
+SHOTLOFT_DEV=1 ...                                 # skip the login item set-up (test builds)
 ```
 
 ## How the app works
@@ -59,8 +59,9 @@ SHOTLOFT_DEV=1 ...                                 # skip the login item and not
     hairline dividers and round icons, the card's newest photo as the picture (`photo` in each
     card of `/api/state`, the camera's embedded preview), and a grid grouped by day with the
     actions in the toolbar. `hdr_new` in the state counts unmerged sets for the panel.
-  - `App.swift` watches the engine's state: it posts a notification when a card has new files, and
-    keeps the menu bar icon current (a dot for new files, a ring while copying). The page and the
+  - `App.swift` watches the engine's state and keeps the menu bar icon current (a dot for new
+    files, a ring while copying). There are no notifications: macOS only allows them for apps
+    signed with an Apple Developer ID. The page and the
     app reuse a check the engine already made (`plan_for` in `/api/state`).
   - "Open at login" (`SMAppService`) is turned on once, at first launch; it's a switch under ⋯.
   - `ShotLoft --version` prints the version (the installer uses it), and `ShotLoft --check` starts
@@ -242,7 +243,7 @@ Test hooks:
 | `SHOTLOFT_UPDATE_URL` | Uses this URL for the update check |
 | `SHOTLOFT_URL_FILE` | Writes the `--serve` URL to a file, for windowed builds without a console |
 | `SHOTLOFT_ENGINE` | Mac app: run this command as the engine instead of the bundled one |
-| `SHOTLOFT_DEV` | Mac app: skip the login item and notification set-up |
+| `SHOTLOFT_DEV` | Mac app: skip the login item set-up |
 
 ## Former name (Sony Import)
 

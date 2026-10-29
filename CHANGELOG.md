@@ -5,6 +5,15 @@ when a new version is out.
 
 ShotLoft was called **Sony Import** up to v2.0.0.
 
+## [Unreleased]
+
+- **Choose where each backup goes.** Under the card, "To …" lists the backup folders you've used,
+  and Choose Folder… for another one, so every backup can go somewhere different.
+- **A smaller, quieter panel.** The backup button sits next to the card, and everything else is
+  under ⋯.
+- **No notification requests.** macOS only allows notifications from apps signed by a registered
+  Apple developer, so the menu bar icon's dot shows when a card has new photos instead.
+
 ## [2.4.0] - 2026-10-29
 
 - **A native Mac app.** The menu bar panel and the HDR Merge window are rebuilt in SwiftUI, in the

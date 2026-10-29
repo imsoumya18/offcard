@@ -1,25 +1,9 @@
-// macOS integration: notifications, opening at login, folder pickers, Finder, and the menu bar icon.
+// macOS integration: opening at login, folder pickers, Finder, and the menu bar icon.
 
 import AppKit
 import ServiceManagement
-import UserNotifications
 
 enum System {
-    // MARK: notifications
-
-    static func askForNotifications() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
-    }
-
-    static func notify(_ title: String, _ body: String) {
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        content.sound = .default
-        let req = UNNotificationRequest(identifier: "shotloft-card", content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(req)
-    }
-
     // MARK: opening at login
 
     static var opensAtLogin: Bool { SMAppService.mainApp.status == .enabled }

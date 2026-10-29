@@ -50,9 +50,9 @@ anyway**. The one-line install avoids this.
 
 ## How to use
 
-**On a Mac**, ShotLoft lives in the menu bar: click its aperture icon for a panel with your card,
-your backup drive and the tools. It opens at login (switch that off under ⋯ in the panel), and when
-you put in a card with new photos it tells you, and puts a dot on the icon.
+**On a Mac**, ShotLoft lives in the menu bar: click its aperture icon for a small panel with your
+card, where it goes, and the tools. It opens at login (switch that off under ⋯), and when you put
+in a card with new photos, the icon gets a dot.
 **On Windows and Linux**, open ShotLoft and pick a tool.
 
 ### Card Backup

@@ -229,7 +229,7 @@ def api_state(_):
         "hdr_folder_exists": bool(APP.hdr_folder and os.path.isdir(APP.hdr_folder)),
         "hdr_new": None if APP.hdr_sets is None else sum(not st["done"] for st in APP.hdr_sets), "update": {"latest": newer, "line": E.INSTALL_LINE_WIN if E.IS_WIN else E.INSTALL_LINE}
                                   if newer else None,
-        "can_pick": True, "plan_for": APP.plan_key,
+        "can_pick": True, "plan_for": APP.plan_key, "recent_dests": recent_dests(),
     }
 
 
@@ -240,8 +240,20 @@ def api_set_dest(body):
     if os.path.exists(path) and not os.path.isdir(path):
         raise RuntimeError("That's a file, not a folder.")
     APP.dest, APP.plan = path, None
-    E.save_config({**E.load_config(), "dest": path})
+    cfg = E.load_config()
+    recent = [path] + [p for p in cfg.get("recent_dests", []) if p != path]
+    E.save_config({**cfg, "dest": path, "recent_dests": recent[:5]})
     return {"dest": path}
+
+
+def recent_dests():
+    """Backup folders used before (newest first, current one included), for choosing each time."""
+    cfg = E.load_config()
+    seen = []
+    for p in [APP.dest] + cfg.get("recent_dests", []):
+        if p and p not in seen:
+            seen.append(p)
+    return seen[:5]
 
 
 def api_pick(_):

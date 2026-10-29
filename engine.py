@@ -426,7 +426,10 @@ def drive_of(path):
 
 
 def detect(dest=None):
-    cards = [v for v in mounted_volumes() if is_sony_card(v)]
+    test_cards = [c for c in os.environ.get("SHOTLOFT_TEST_CARDS", "").split(os.pathsep) if c]
+    # Tests name their cards, and then real drives are never looked at (or asked for).
+    cards = [c for c in test_cards if is_sony_card(c)] if test_cards else \
+        [v for v in mounted_volumes() if is_sony_card(v)]
     drive = drive_of(dest) if dest else None
     return {
         "cards": cards,

@@ -43,8 +43,7 @@ struct ShotLoftApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ note: Notification) {
         NSApp.setActivationPolicy(.accessory)   // a menu bar app: no Dock icon
-        if ProcessInfo.processInfo.environment["SHOTLOFT_DEV"] == nil {  // development builds skip these
-            System.askForNotifications()
+        if ProcessInfo.processInfo.environment["SHOTLOFT_DEV"] == nil {  // development builds skip this
             System.setUpLoginItemOnce()
         }
     }
@@ -55,7 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 /// What the app does on its own as the engine's state changes: checks a card when it goes in,
-/// tells the user about new files, and keeps the menu bar icon current.
+/// and keeps the menu bar icon current (a dot when a card has new files).
 @MainActor
 final class AppModel: ObservableObject {
     static let shared = AppModel()
@@ -64,7 +63,6 @@ final class AppModel: ObservableObject {
     @Published private(set) var icon = System.menuBarIcon()
 
     private var lastKey = ""
-    private var notified = ""
     private var hdrLooked = ""   // the folder, and the backup after which, HDR sets were last counted
     private var lastBackup = ""
     private var iconState = ""
@@ -105,16 +103,6 @@ final class AppModel: ObservableObject {
             hdrLooked = hdrKey
             Task { try? await engine.call("/api/hdr/scan", [:]) }
         }
-
-        // New files: say so once per card.
-        if planned, job.result.new_files.int > 0, k != notified {
-            notified = k
-            let r = job.result
-            let name = s.cards[0].name.str
-            System.notify(name.isEmpty ? "Memory card" : name,
-                          "\(counts(r.new_photos.int, r.new_videos.int, r.new_xml.int)) to back up. Click ShotLoft in the menu bar.")
-        }
-        if !cardsIn { notified = "" }
 
         // The icon: a ring while copying, a dot while a card has new files.
         var state = "idle"
