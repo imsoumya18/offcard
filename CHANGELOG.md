@@ -5,7 +5,7 @@ when a new version is out.
 
 ShotLoft was called **Sony Import** up to v2.0.0.
 
-## Unreleased
+## [2.6.0] - 2026-10-30
 
 - **See the folders before you back up.** On a Mac, once a card is checked, the panel shows the
   folder tree the backup will create under the folder you chose: which folders are already there,
