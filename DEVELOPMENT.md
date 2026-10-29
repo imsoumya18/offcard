@@ -54,9 +54,11 @@ SHOTLOFT_DEV=1 ...                                 # skip the login item and not
   built by PyInstaller). At launch it starts the engine with `--serve --agent`, reads its URL and
   token, and uses the same JSON API as the page. In agent mode the engine checks a card as soon as
   it goes in, and exits when the app does.
-  - The panel and the HDR Merge window are SwiftUI (`mac/Sources/Panel.swift`, `HDR.swift`): SF
-    Symbols, system fonts and controls, the system's Liquid Glass for the panel, and a glass main
-    button on macOS 26 (a prominent one before).
+  - The panel and the HDR Merge window are SwiftUI (`mac/Sources/Panel.swift`, `HDR.swift`),
+    designed like the system's menu bar menus and Photos: rows straight on the Liquid Glass with
+    hairline dividers and round icons, the card's newest photo as the picture (`photo` in each
+    card of `/api/state`, the camera's embedded preview), and a grid grouped by day with the
+    actions in the toolbar. `hdr_new` in the state counts unmerged sets for the panel.
   - `App.swift` watches the engine's state: it posts a notification when a card has new files, and
     keeps the menu bar icon current (a dot for new files, a ring while copying). The page and the
     app reuse a check the engine already made (`plan_for` in `/api/state`).

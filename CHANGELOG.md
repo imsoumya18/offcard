@@ -7,9 +7,10 @@ ShotLoft was called **Sony Import** up to v2.0.0.
 
 ## [Unreleased]
 
-- **A native Mac app.** The menu bar panel and the HDR Merge window are rebuilt in SwiftUI, with
-  the system's Liquid Glass, SF Symbols and Mac controls throughout, and HDR Merge shows your
-  bracketed sets as a grid of previews.
+- **A native Mac app.** The menu bar panel and the HDR Merge window are rebuilt in SwiftUI, in the
+  manner of the Mac's own menus and Photos: the newest photo on your card at the top (with the
+  copy progress around it), plain rows on the system's Liquid Glass, and HDR Merge as a photo grid
+  grouped by day. The panel also tells you how many bracketed sets are waiting to be merged.
 
 ## [2.3.0] - 2026-10-29
 

@@ -34,21 +34,9 @@ struct ShotLoftApp: App {
 
         Window("HDR Merge", id: "hdr") {
             HDRView().environmentObject(model.engine)
-                .modifier(WindowGlass())
         }
         .defaultSize(width: 760, height: 660)
         .windowResizability(.contentMinSize)
-    }
-}
-
-/// The HDR Merge window lets the desktop show through, like the panel.
-struct WindowGlass: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(macOS 15.0, *) {
-            content.containerBackground(.thinMaterial, for: .window)
-        } else {
-            content
-        }
     }
 }
 
@@ -77,6 +65,8 @@ final class AppModel: ObservableObject {
 
     private var lastKey = ""
     private var notified = ""
+    private var hdrLooked = ""   // the folder, and the backup after which, HDR sets were last counted
+    private var lastBackup = ""
     private var iconState = ""
     private var watch: AnyCancellable?
 
@@ -105,6 +95,15 @@ final class AppModel: ObservableObject {
         if cardsIn, s.dest.exists, s.dest_drive_connected.bool, job.state.str != "running", k != lastKey {
             lastKey = k
             if !planned { Task { try? await engine.call("/api/plan", [:]) } }
+        }
+
+        // Count the HDR folder's unmerged sets (for "3 new sets"): at start, and after each backup.
+        let afterBackup = job.kind.str == "import" && job.state.str == "done" ? "\(job.id.double)" : lastBackup
+        lastBackup = afterBackup
+        let hdrKey = s.hdr_folder.str + "|" + afterBackup
+        if s.hdr_folder.exists, s.hdr_folder_exists.bool, s.hdr_job.state.str != "running", hdrKey != hdrLooked {
+            hdrLooked = hdrKey
+            Task { try? await engine.call("/api/hdr/scan", [:]) }
         }
 
         // New files: say so once per card.

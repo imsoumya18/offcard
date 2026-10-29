@@ -136,7 +136,18 @@ def card_summary(card):
     photos = sum(len(it["files"]) for it in items if it["kind"] != "video")
     videos = sum(1 for it in items if it["kind"] == "video")
     return {"path": card, "name": os.path.basename(card.rstrip("/\\")) or card,
-            "photos": photos, "videos": videos}
+            "photos": photos, "videos": videos, "photo": newest_photo(items)}
+
+
+def newest_photo(items):
+    """A small preview of the card's newest photo (the camera's own embedded JPEG), cached."""
+    shots = [it for it in items if it["kind"] != "video"]
+    if not shots or HDR is None:
+        return None
+    try:
+        return thumbnail(shots[-1]["key_file"], 160)
+    except Exception:
+        return None
 
 
 def day_label(rel):
@@ -215,7 +226,8 @@ def api_state(_):
         "dest_drive_connected": info["dest_drive_connected"], "dest_exists": info["dest_exists"],
         "free_bytes": E.free_bytes(APP.dest) if APP.dest and info["dest_drive_connected"] else None,
         "job": APP.job, "hdr_job": hdr_job_brief(), "hdr_missing": HDR_MISSING, "hdr_folder": APP.hdr_folder,
-        "hdr_folder_exists": bool(APP.hdr_folder and os.path.isdir(APP.hdr_folder)), "update": {"latest": newer, "line": E.INSTALL_LINE_WIN if E.IS_WIN else E.INSTALL_LINE}
+        "hdr_folder_exists": bool(APP.hdr_folder and os.path.isdir(APP.hdr_folder)),
+        "hdr_new": None if APP.hdr_sets is None else sum(not st["done"] for st in APP.hdr_sets), "update": {"latest": newer, "line": E.INSTALL_LINE_WIN if E.IS_WIN else E.INSTALL_LINE}
                                   if newer else None,
         "can_pick": True, "plan_for": APP.plan_key,
     }
@@ -308,27 +320,31 @@ def api_trash(_):
 # ---------------------------------------------------------------- HDR Merge
 
 def thumbnail(path, size=240):
-    """Small JPEG data URI: the RAW's embedded preview, or the merged JPEG itself."""
+    """Small JPEG data URI: the RAW's embedded preview, or the merged JPEG itself. Cached by file,
+    size and modification time; a file without a usable preview is remembered as None."""
     mtime = os.path.getmtime(path)
-    hit = APP.thumbs.get(path)
+    hit = APP.thumbs.get((path, size))
     if hit and hit[0] == mtime:
         return hit[1]
-    from PIL import Image
-    if path.upper().endswith(".ARW"):
-        with rawpy.imread(path) as r:
-            th = r.extract_thumb()
-        if th.format != rawpy.ThumbFormat.JPEG:
-            return None
-        im = Image.open(io.BytesIO(th.data))
-    else:
-        im = Image.open(path)
-    im.draft("RGB", (size, size))
-    im = im.convert("RGB")
-    im.thumbnail((size, size))
-    buf = io.BytesIO()
-    im.save(buf, "JPEG", quality=80)
-    uri = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
-    APP.thumbs[path] = (mtime, uri)
+    uri = None
+    try:
+        from PIL import Image
+        if path.upper().endswith(".ARW"):
+            with rawpy.imread(path) as r:
+                th = r.extract_thumb()
+            im = Image.open(io.BytesIO(th.data)) if th.format == rawpy.ThumbFormat.JPEG else None
+        else:
+            im = Image.open(path)
+        if im is not None:
+            im.draft("RGB", (size, size))
+            im = im.convert("RGB")
+            im.thumbnail((size, size))
+            buf = io.BytesIO()
+            im.save(buf, "JPEG", quality=82)
+            uri = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+    except Exception:
+        uri = None
+    APP.thumbs[(path, size)] = (mtime, uri)
     return uri
 
 

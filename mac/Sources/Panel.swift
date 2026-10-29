@@ -1,4 +1,6 @@
-// The menu bar panel: the card, the backup drive, and the tools, on the system's Liquid Glass.
+// The menu bar panel, in the manner of the system's own menu bar menus (Wi-Fi, Bluetooth, Control
+// Center): rows straight on the glass, hairline dividers between groups, round icons, a highlight
+// only under the pointer. The card's newest photo is the picture at the top.
 
 import SwiftUI
 
@@ -6,111 +8,135 @@ let brand = Color(red: 0.0, green: 0.56, blue: 0.56)
 
 // MARK: building blocks
 
-/// A quiet surface on the glass (Apple: don't stack glass on glass; use fills inside it).
-struct Surface: ViewModifier {
-    var radius: CGFloat = 14
-    func body(content: Content) -> some View {
-        content.background(.fill.quinary, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .strokeBorder(.separator.opacity(0.5), lineWidth: 0.5))
+/// A round icon like Control Center's: grey, or filled with the accent when it needs you.
+struct RoundIcon: View {
+    let symbol: String
+    var active = false
+    var tint: Color = brand
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(active ? Color.white : Color.primary)
+            .frame(width: 26, height: 26)
+            .background(Circle().fill(active ? AnyShapeStyle(tint) : AnyShapeStyle(.fill.tertiary)))
     }
 }
 
-extension View {
-    func surface(_ radius: CGFloat = 14) -> some View { modifier(Surface(radius: radius)) }
-
-    /// The main action: a tinted Liquid Glass button on macOS 26, a prominent one before.
-    @ViewBuilder func primaryAction() -> some View {
-        #if compiler(>=6.2)
-        if #available(macOS 26.0, *) {
-            self.buttonStyle(.glassProminent).tint(brand).controlSize(.large)
-        } else {
-            self.buttonStyle(.borderedProminent).tint(brand).controlSize(.large)
-        }
-        #else
-        self.buttonStyle(.borderedProminent).tint(brand).controlSize(.large)
-        #endif
-    }
-}
-
-/// A row in a group: icon, title, detail, and a chevron; highlights on hover like a menu item.
-struct RowStyle: ButtonStyle {
+/// A menu row: highlights under the pointer, like a menu item.
+struct MenuRowStyle: ButtonStyle {
     @State private var hover = false
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
-            .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(configuration.isPressed ? AnyShapeStyle(.fill.secondary)
-                      : hover ? AnyShapeStyle(.fill.tertiary) : AnyShapeStyle(.clear)))
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(Color.primary.opacity(configuration.isPressed ? 0.16 : hover ? 0.09 : 0)))
             .onHover { hover = $0 }
-            .animation(.easeOut(duration: 0.12), value: hover)
+            .padding(.horizontal, 6)
     }
 }
 
-struct Row: View {
-    let symbol: String
+struct MenuRow: View {
+    let symbol: String?
     let title: String
     var detail: String? = nil
+    var active = false
     var tint: Color = brand
-    var chevron = true
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 11) {
-                Image(systemName: symbol)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(tint)
-                    .frame(width: 28, height: 28)
-                    .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title).font(.system(size: 13, weight: .medium)).foregroundStyle(.primary)
-                    if let detail {
-                        Text(detail).font(.system(size: 11.5)).foregroundStyle(.secondary).lineLimit(1)
+            HStack(spacing: 10) {
+                if let symbol { RoundIcon(symbol: symbol, active: active, tint: tint) }
+                Text(title).font(.system(size: 13)).foregroundStyle(.primary).lineLimit(1)
+                Spacer(minLength: 8)
+                if let detail {
+                    Text(detail).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
+                }
+            }
+            .frame(minHeight: symbol == nil ? 20 : 28)
+        }
+        .buttonStyle(MenuRowStyle())
+    }
+}
+
+struct SectionLabel: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+    var body: some View {
+        Text(text).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+            .padding(.horizontal, 14).padding(.top, 2).padding(.bottom, 3)
+    }
+}
+
+struct Rule: View {
+    var body: some View { Divider().padding(.horizontal, 14).padding(.vertical, 6) }
+}
+
+/// The card's newest photo in a circle, with a small card badge; a ring around it shows progress.
+struct CardPicture: View {
+    let photo: NSImage?
+    var symbol = "sdcard.fill"
+    var progress: Double? = nil
+    var spinning = false
+    @State private var turn = false
+
+    var ringed: Bool { progress != nil || spinning }
+
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            ZStack {
+                if ringed {
+                    Circle().stroke(.fill.tertiary, lineWidth: 3)
+                    Circle().trim(from: 0, to: spinning ? 0.25 : max(0.02, min(progress ?? 0, 1)))
+                        .stroke(brand, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .rotationEffect(.degrees(spinning ? (turn ? 270 : -90) : -90))
+                        .animation(spinning ? .linear(duration: 1).repeatForever(autoreverses: false) : .smooth, value: turn)
+                        .animation(.smooth, value: progress)
+                }
+                SwiftUI.Group {
+                    if let photo {
+                        Image(nsImage: photo).resizable().aspectRatio(contentMode: .fill)
+                    } else {
+                        Image(systemName: symbol).font(.system(size: 20, weight: .medium)).foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity).background(.fill.tertiary)
                     }
                 }
-                Spacer(minLength: 4)
-                if chevron {
-                    Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold)).foregroundStyle(.tertiary)
-                }
+                .frame(width: ringed ? 44 : 54, height: ringed ? 44 : 54)
+                .clipShape(Circle())
             }
-            .padding(.horizontal, 8).padding(.vertical, 7)
+            .frame(width: 54, height: 54)
+            if photo != nil {
+                Image(systemName: "sdcard.fill").font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
+                    .frame(width: 19, height: 19)
+                    .background(Circle().fill(.background))
+                    .offset(x: 2, y: 2)
+            }
         }
-        .buttonStyle(RowStyle())
+        .onAppear { turn = true }
     }
 }
 
-struct RowGroup<Content: View>: View {
-    let title: String
-    @ViewBuilder let content: Content
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(title).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
-                .padding(.leading, 6)
-            VStack(spacing: 0) { content }.padding(4).surface(13)
+extension View {
+    /// The one main action: a capsule, Liquid Glass on macOS 26.
+    @ViewBuilder func mainAction() -> some View {
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *) {
+            self.buttonStyle(.glassProminent).buttonBorderShape(.capsule).tint(brand).controlSize(.large)
+        } else {
+            self.buttonStyle(.borderedProminent).buttonBorderShape(.capsule).tint(brand).controlSize(.large)
         }
+        #else
+        self.buttonStyle(.borderedProminent).buttonBorderShape(.capsule).tint(brand).controlSize(.large)
+        #endif
     }
 }
 
-struct Ring: View {
-    let fraction: Double?   // nil: still starting, spins
-    @State private var spin = false
-    var body: some View {
-        ZStack {
-            Circle().stroke(.fill.tertiary, lineWidth: 3.5)
-            Circle().trim(from: 0, to: fraction.map { max(0.02, min($0, 1)) } ?? 0.28)
-                .stroke(brand.gradient, style: StrokeStyle(lineWidth: 3.5, lineCap: .round))
-                .rotationEffect(.degrees(fraction == nil ? (spin ? 270 : -90) : -90))
-                .animation(fraction == nil ? .linear(duration: 1).repeatForever(autoreverses: false) : .smooth,
-                           value: fraction == nil ? spin : (fraction ?? 0) > 0)
-            if let fraction {
-                Text("\(Int(fraction * 100))").font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                    .monospacedDigit().contentTransition(.numericText())
-            }
-        }
-        .frame(width: 38, height: 38)
-        .onAppear { spin = true }
-    }
+func image(fromDataURI uri: String?) -> NSImage? {
+    guard let uri, let comma = uri.firstIndex(of: ","),
+          let data = Data(base64Encoded: String(uri[uri.index(after: comma)...])) else { return nil }
+    return NSImage(data: data)
 }
 
 // MARK: the panel
@@ -126,157 +152,140 @@ struct PanelView: View {
     var s: J { engine.state }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 0) {
             header
             if let failure = engine.failure {
-                Label(failure, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red).font(.callout)
+                Text(failure).font(.system(size: 12)).foregroundStyle(.red).padding(.horizontal, 14).padding(.vertical, 8)
             } else if !engine.ready {
-                HStack(spacing: 10) { ProgressView().controlSize(.small); Text("Starting…").foregroundStyle(.secondary) }
-                    .frame(maxWidth: .infinity, minHeight: 90)
+                HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Starting…").foregroundStyle(.secondary) }
+                    .padding(.horizontal, 14).padding(.vertical, 18)
             } else {
                 hero
                 if let note {
                     Label(note.text, systemImage: note.bad ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
-                        .font(.callout).foregroundStyle(note.bad ? Color.red : Color.green)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
+                        .font(.system(size: 12)).foregroundStyle(note.bad ? Color.red : Color.secondary)
+                        .padding(.horizontal, 14).padding(.bottom, 8)
                 }
-                if let latest = s.update.latest.string { updateBanner(latest) }
                 cardActions
                 drive
-                RowGroup(title: "Tools") {
-                    Row(symbol: "square.stack.3d.up.fill", title: "HDR Merge",
-                        detail: hdrDetail) { openHDR() }
+                Rule()
+                MenuRow(symbol: "square.stack.3d.up.fill", title: "HDR Merge", detail: hdrDetail,
+                        active: s.hdr_new.int > 0) { openHDR() }
+                if let latest = s.update.latest.string {
+                    MenuRow(symbol: "arrow.down", title: "Update to \(latest)", detail: "Copy install line", active: true) {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(s.update.line.str, forType: .string)
+                        note = ("Install line copied. Paste it into Terminal.", false)
+                    }
                 }
             }
-            footer
+            Rule()
+            MenuRow(symbol: nil, title: "Open Backup Folder") {
+                if let d = s.dest.string, s.dest_exists.bool { System.showInFinder(d); dismiss() }
+            }
+            MenuRow(symbol: nil, title: "Quit ShotLoft") { NSApp.terminate(nil) }
         }
-        .padding(14)
-        .frame(width: 340)
-        .animation(.smooth(duration: 0.25), value: s.json)
+        .padding(.top, 4).padding(.bottom, 7)
+        .frame(width: 320)
+        .animation(.smooth(duration: 0.22), value: s.job.json)
         .onAppear { loginOn = System.opensAtLogin; Task { await engine.refresh() } }
     }
 
-    // MARK: header and footer
+    // MARK: header
 
     var header: some View {
-        HStack(spacing: 8) {
-            Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 22, height: 22)
-            Text("ShotLoft").font(.system(size: 13.5, weight: .semibold))
-            if let v = s.version.string { Text(v).font(.system(size: 11)).foregroundStyle(.tertiary) }
+        HStack {
+            Text("ShotLoft").font(.system(size: 13, weight: .semibold))
             Spacer()
             Menu {
-                Toggle("Open at Login", isOn: Binding(get: { loginOn }, set: { System.setOpensAtLogin($0); loginOn = System.opensAtLogin }))
+                Toggle("Open at Login", isOn: Binding(get: { loginOn },
+                                                      set: { System.setOpensAtLogin($0); loginOn = System.opensAtLogin }))
                 Button("Change Backup Folder…") { pickBackup() }
                 Divider()
-                Button("Quit ShotLoft") { NSApp.terminate(nil) }
+                Text("ShotLoft \(s.version.str)")
             } label: {
-                Image(systemName: "ellipsis.circle").font(.system(size: 15)).foregroundStyle(.secondary)
+                Image(systemName: "ellipsis").font(.system(size: 13, weight: .semibold)).foregroundStyle(.secondary)
+                    .frame(width: 24, height: 20).contentShape(Rectangle())
             }
             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
         }
-        .padding(.horizontal, 2)
-    }
-
-    var footer: some View {
-        HStack {
-            Button("Open Backup Folder") { if let d = s.dest.string { System.showInFinder(d) } }
-                .disabled(!s.dest_exists.bool)
-            Spacer()
-            Button("Quit") { NSApp.terminate(nil) }
-        }
-        .buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(.secondary)
-        .padding(.horizontal, 4).padding(.top, 2)
+        .padding(.horizontal, 14).padding(.top, 6).padding(.bottom, 8)
     }
 
     // MARK: the card
 
+    var card: J { s.cards[0] }
     var cardName: String {
-        let cards = s.cards.array
-        guard let first = cards.first else { return "" }
-        return first.name.str + (cards.count > 1 ? " +\(cards.count - 1)" : "")
+        let n = s.cards.array.count
+        return card.name.str + (n > 1 ? " and \(n - 1) more" : "")
     }
 
     @ViewBuilder var hero: some View {
         let job = s.job, r = job.result, p = job.progress
         let kind = job.kind.str, st = job.state.str
+        let photo = image(fromDataURI: card.photo.string)
         VStack(alignment: .leading, spacing: 12) {
             if !s.dest.exists {
-                heroTop("folder.badge.plus", "Choose a backup folder", "Where your photos and videos will go.")
-                Button { pickBackup() } label: { Text("Choose Folder").frame(maxWidth: .infinity) }.primaryAction()
+                heroLine(CardPicture(photo: nil, symbol: "folder.fill"), "Choose a backup folder", "Where your photos and videos go")
+                Button { pickBackup() } label: { Text("Choose Folder…").frame(maxWidth: .infinity) }.mainAction()
             } else if !s.dest_drive_connected.bool {
-                heroTop("externaldrive.badge.exclamationmark", "\(driveName) isn't connected",
-                        "Plug in your backup drive.", tone: .red)
+                heroLine(CardPicture(photo: nil, symbol: "externaldrive.fill"), "\(driveName) isn't connected",
+                         "Plug in your backup drive", tone: .red)
             } else if s.cards.array.isEmpty {
-                heroTop("sdcard", "Insert a memory card", "ShotLoft notices it by itself.", dim: true)
-            } else if job.exists == false || (kind == "plan" && st == "running") {
-                heroTop("sdcard.fill", cardName,
-                        p.exists ? "Checking what's new · \(p.done.int) of \(p.total.int) files" : "Checking what's new…",
-                        ring: p.exists ? p.done.double / max(p.total.double, 1) : nil, ringSpins: !p.exists)
+                heroLine(CardPicture(photo: nil, symbol: "sdcard"), "No memory card", "Put one in and ShotLoft checks it")
+            } else if !job.exists || (kind == "plan" && st == "running") {
+                heroLine(CardPicture(photo: photo, progress: p.exists ? p.done.double / max(p.total.double, 1) : nil, spinning: !p.exists),
+                         cardName, p.exists ? "Reading \(p.done.int) of \(p.total.int) files on the card…" : "Checking what's new…")
             } else if st == "error" {
-                heroTop("sdcard.fill", cardName, job.error.str, tone: .red)
+                heroLine(CardPicture(photo: photo), cardName, job.error.str, tone: .red)
                 Button { Task { await engine.act("/api/reset"); model.replan() } } label: {
-                    Text("Try Again").frame(maxWidth: .infinity) }.primaryAction()
+                    Text("Try Again").frame(maxWidth: .infinity) }.mainAction()
             } else if st == "running" && kind == "import" {
                 let f = p.done.double / max(p.total.double, 1)
-                heroTop("sdcard.fill", cardName, p.exists ? "Copying \(p.files_done.int) of \(p.files_total.int) files\(timeLeft(p))" : "Starting…", ring: f)
-                VStack(spacing: 5) {
-                    ProgressView(value: f).tint(brand)
-                    HStack { Text("\(human(p.done.double)) of \(human(p.total.double))"); Spacer(); Text("\(Int(f * 100))%") }
-                        .font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit()
-                }
+                heroLine(CardPicture(photo: photo, progress: f), cardName,
+                         p.exists ? "Copying \(p.files_done.int) of \(p.files_total.int) files\(timeLeft(p))" : "Starting…")
             } else if st == "running" && kind == "verify" {
-                let f = p.exists ? p.done.double / max(p.total.double, 1) : nil
-                heroTop("checkmark.shield", cardName, "Checking every file, byte by byte", ring: f, ringSpins: f == nil)
+                heroLine(CardPicture(photo: photo, progress: p.exists ? p.done.double / max(p.total.double, 1) : nil, spinning: !p.exists),
+                         cardName, "Checking every file, byte by byte…")
             } else if kind == "plan" {
                 if r.new_files.int == 0 {
-                    heroTop("sdcard.fill", cardName, "Everything is backed up", tone: .green, badge: "checkmark.circle.fill")
+                    heroLine(CardPicture(photo: photo), cardName, "Everything is backed up", tone: .green)
                 } else if !r.enough_space.bool {
-                    heroTop("sdcard.fill", cardName, "Not enough space on the backup drive for \(human(r.needed_bytes.double))", tone: .red)
+                    heroLine(CardPicture(photo: photo), cardName, "Not enough space for \(human(r.needed_bytes.double))", tone: .red)
                 } else {
-                    heroTop("sdcard.fill", cardName, "\(counts(r.new_photos.int, r.new_videos.int, r.new_xml.int)) new · \(human(r.needed_bytes.double))")
+                    heroLine(CardPicture(photo: photo), cardName,
+                             "\(newCounts(r.new_photos.int, r.new_videos.int, r.new_xml.int)) · \(human(r.needed_bytes.double))")
                     Button { Task { await say(engine.act("/api/import")) } } label: {
-                        Text("Back Up \(counts(r.new_photos.int, r.new_videos.int, r.new_xml.int))").frame(maxWidth: .infinity)
-                    }.primaryAction()
+                        Text("Back Up").frame(maxWidth: .infinity) }.mainAction()
                 }
             } else if kind == "import" {
                 let errs = r.errors.array.count
-                heroTop("sdcard.fill", cardName,
-                        errs > 0 ? "\(plural(errs, "file")) couldn't be copied"
+                heroLine(CardPicture(photo: photo), cardName,
+                         errs > 0 ? "\(plural(errs, "file")) couldn't be copied"
                             : "Backed up \(counts(r.photos.int, r.videos.int, r.xml.int))\(r.seconds.double >= 1 ? " in " + duration(r.seconds.double) : "")",
-                        tone: errs > 0 ? .red : .green, badge: errs > 0 ? nil : "checkmark.circle.fill")
+                         tone: errs > 0 ? .red : .green)
             } else if kind == "verify" {
                 let bad = r.cards.array.reduce(0) { $0 + $1.missing.array.count + $1.different.array.count }
-                heroTop("checkmark.shield.fill", cardName,
-                        bad > 0 ? "\(plural(bad, "file")) not safely backed up. Don't format yet." : "Safe to format in your camera",
-                        tone: bad > 0 ? .red : .green, badge: bad > 0 ? nil : "checkmark.circle.fill")
+                heroLine(CardPicture(photo: photo), cardName,
+                         bad > 0 ? "\(plural(bad, "file")) not backed up yet. Don't format." : "Safe to format in your camera",
+                         tone: bad > 0 ? .red : .green)
             }
         }
-        .padding(14)
-        .surface(18)
+        .padding(.horizontal, 14).padding(.bottom, 12)
     }
 
     enum Tone { case normal, green, red }
 
-    func heroTop(_ symbol: String, _ title: String, _ subtitle: String, tone: Tone = .normal, dim: Bool = false,
-                 badge: String? = nil, ring: Double? = nil, ringSpins: Bool = false) -> some View {
+    func heroLine(_ picture: CardPicture, _ title: String, _ subtitle: String, tone: Tone = .normal) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: symbol)
-                .font(.system(size: 21, weight: .medium))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(dim ? AnyShapeStyle(.secondary) : AnyShapeStyle(brand))
-                .frame(width: 46, height: 46)
-                .background((dim ? Color.secondary : brand).opacity(0.14), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            picture
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 14.5, weight: .semibold)).lineLimit(1)
-                HStack(spacing: 4) {
-                    if let badge { Image(systemName: badge) }
-                    Text(subtitle).lineLimit(2)
-                }
-                .font(.system(size: 12))
-                .foregroundStyle(tone == .green ? AnyShapeStyle(Color.green) : tone == .red ? AnyShapeStyle(Color.red) : AnyShapeStyle(.secondary))
+                Text(title).font(.system(size: 14, weight: .semibold)).lineLimit(1)
+                Text(subtitle).font(.system(size: 12)).lineLimit(2)
+                    .foregroundStyle(tone == .green ? AnyShapeStyle(Color.green) : tone == .red ? AnyShapeStyle(Color.red) : AnyShapeStyle(.secondary))
+                    .contentTransition(.opacity)
             }
             Spacer(minLength: 0)
-            if ring != nil || ringSpins { Ring(fraction: ringSpins ? nil : ring) }
         }
     }
 
@@ -293,18 +302,17 @@ struct PanelView: View {
         let finished = job.state.str == "done" && !s.cards.array.isEmpty &&
             ((kind == "plan" && job.result.new_files.int == 0) || kind == "import" || kind == "verify")
         if finished {
-            RowGroup(title: "Card") {
-                if kind != "verify" {
-                    Row(symbol: "checkmark.shield.fill", title: "Check It's Safe to Format", detail: "Every file, byte by byte") {
-                        Task { await say(engine.act("/api/verify")) }
-                    }
+            Rule()
+            if kind != "verify" {
+                MenuRow(symbol: "checkmark.shield.fill", title: "Check It's Safe to Format", detail: "Byte by byte") {
+                    Task { await say(engine.act("/api/verify")) }
                 }
-                if kind == "import", job.result.raw_jpg_pairs.int > 0 {
-                    Row(symbol: "trash.fill", title: "Move \(plural(job.result.raw_jpg_pairs.int, "Extra JPG")) to the \(s.trash_name.str)",
-                        detail: "Shot as RAW + JPG", tint: .orange) { Task { await trash() } }
-                }
-                Row(symbol: "eject.fill", title: "Eject Card", tint: .secondary) { Task { await eject() } }
             }
+            if kind == "import", job.result.raw_jpg_pairs.int > 0 {
+                MenuRow(symbol: "trash.fill", title: "Move Extra JPGs to \(s.trash_name.str)",
+                        detail: "\(job.result.raw_jpg_pairs.int)") { Task { await trash() } }
+            }
+            MenuRow(symbol: "eject.fill", title: "Eject \(card.name.str)") { Task { await eject() } }
         }
     }
 
@@ -316,39 +324,24 @@ struct PanelView: View {
     }
 
     @ViewBuilder var drive: some View {
-        if let dest = s.dest.string {
-            let folder = dest.split(separator: "/").suffix(2).joined(separator: " / ")
-            let free = s.free_bytes.exists ? " · \(human(s.free_bytes.double)) free" : ""
-            RowGroup(title: "Backup Drive") {
-                Row(symbol: s.dest_drive.exists ? "externaldrive.fill" : "internaldrive.fill", title: driveName,
-                    detail: folder + (s.dest_drive_connected.bool ? free : " · not connected"), tint: .blue) {
-                    if s.dest_exists.bool { System.showInFinder(dest) }
-                }
+        if s.dest.exists {
+            Rule()
+            SectionLabel(s.cards.array.isEmpty ? "Backup drive" : "Also plugged in")
+            MenuRow(symbol: s.dest_drive.exists ? "externaldrive.fill" : "internaldrive.fill", title: driveName,
+                    detail: s.dest_drive_connected.bool
+                        ? (s.job.kind.str == "import" && s.job.state.str == "running" ? "Writing…"
+                           : s.free_bytes.exists ? "\(human(s.free_bytes.double)) free" : "Backup drive")
+                        : "Not connected") {
+                if let d = s.dest.string, s.dest_exists.bool { System.showInFinder(d); dismiss() }
             }
         }
     }
 
-    var hdrDetail: String {
+    var hdrDetail: String? {
         let j = s.hdr_job
-        if j.state.str == "running" { return j.kind.str == "merge" ? "Merging…" : "Looking for bracketed shots…" }
-        return "Blend bracketed shots into one photo"
-    }
-
-    func updateBanner(_ latest: String) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: "arrow.down.circle.fill").font(.system(size: 18)).foregroundStyle(brand)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("ShotLoft \(latest) is available").font(.system(size: 12.5, weight: .semibold))
-                Text("Run the install line again to update.").font(.system(size: 11)).foregroundStyle(.secondary)
-            }
-            Spacer()
-            Button("Copy Line") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(s.update.line.str, forType: .string)
-                note = ("Install line copied. Paste it into Terminal.", false)
-            }.controlSize(.small)
-        }
-        .padding(10).surface(12)
+        if j.state.str == "running" { return j.kind.str == "merge" ? "Merging…" : "Looking…" }
+        let n = s.hdr_new.int
+        return n > 0 ? plural(n, "new set") : nil
     }
 
     // MARK: actions
@@ -365,10 +358,9 @@ struct PanelView: View {
     func eject() async {
         do {
             let r = try await engine.call("/api/eject", [:])
-            let results = r.results.array
-            if let bad = results.first(where: { !$0.ejected.bool }) {
+            if let bad = r.results.array.first(where: { !$0.ejected.bool }) {
                 note = ("Couldn't eject \((bad.card.str as NSString).lastPathComponent). Eject it in Finder.", true)
-            } else if !results.isEmpty {
+            } else {
                 note = ("Ejected. You can take the card out.", false)
             }
         } catch { note = (error.localizedDescription, true) }
@@ -384,7 +376,7 @@ struct PanelView: View {
     }
 
     func openHDR() {
-        dismiss()   // close the panel, then bring up the window
+        dismiss()
         openWindow(id: "hdr")
         NSApp.activate(ignoringOtherApps: true)
     }

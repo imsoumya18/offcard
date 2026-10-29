@@ -183,6 +183,13 @@ func counts(_ p: Int, _ v: Int, _ x: Int = 0) -> String {
     return parts.count == 1 ? parts[0] : parts.dropLast().joined(separator: ", ") + " and " + parts.last!
 }
 
+/// "18 new photos and 2 videos"
+func newCounts(_ p: Int, _ v: Int, _ x: Int = 0) -> String {
+    let text = counts(p, v, x)
+    guard let space = text.firstIndex(of: " ") else { return text }
+    return text[..<space] + " new" + text[space...]
+}
+
 func duration(_ s: Double) -> String {
     let s = Int(s.rounded())
     return s < 60 ? "\(s)s" : "\(s / 60)m \(String(format: "%02d", s % 60))s"
