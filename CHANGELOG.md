@@ -5,7 +5,7 @@ when a new version is out.
 
 ShotLoft was called **Sony Import** up to v2.0.0.
 
-## [Unreleased]
+## [2.4.0] - 2026-10-29
 
 - **A native Mac app.** The menu bar panel and the HDR Merge window are rebuilt in SwiftUI, in the
   manner of the Mac's own menus and Photos: the newest photo on your card at the top (with the
