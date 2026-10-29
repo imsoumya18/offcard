@@ -5,6 +5,13 @@ when a new version is out.
 
 ShotLoft was called **Sony Import** up to v2.0.0.
 
+## [2.6.1] - 2026-10-30
+
+- **A launch video** at the top of the README: card in, the folders it goes into, Back Up, safe to
+  format, and HDR Merge, in 23 seconds.
+- **The README's steps match the new panel**: Change under Back Up To, the Back Up button that
+  says how much is new, and Check Before Formatting.
+
 ## [2.6.0] - 2026-10-30
 
 - **See the folders before you back up.** On a Mac, once a card is checked, the panel shows the
