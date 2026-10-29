@@ -5,7 +5,7 @@ when a new version is out.
 
 ShotLoft was called **Sony Import** up to v2.0.0.
 
-## [Unreleased]
+## [2.5.0] - 2026-10-30
 
 - **Choose where each backup goes.** Under the card, "To …" lists the backup folders you've used,
   and Choose Folder… for another one, so every backup can go somewhere different.
