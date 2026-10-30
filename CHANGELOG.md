@@ -5,6 +5,11 @@ when a new version is out.
 
 offcard was called **ShotLoft** up to v0.9.1, and **Sony Import** up to v0.4.0.
 
+## [0.12.1] - 2026-10-30
+
+- A shorter README: what offcard does, how to install it, and how to use it.
+- The launch video now shows tagging a day and the new Back Up button.
+
 ## [0.12.0] - 2026-10-30
 
 - **Tag a day.** Next to the day's folder, **+ Add tag** names it for what happened: Ooty,
