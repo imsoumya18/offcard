@@ -5,6 +5,14 @@ when a new version is out.
 
 offcard was called **ShotLoft** up to v2.6.1, and **Sony Import** up to v2.0.0.
 
+## [3.1.0] - 2026-10-30
+
+- **HDR Merge lives in the popup.** On a Mac, click HDR Merge and the panel slides to its page; ‹
+  slides back. No more separate window. The sets are listed by day with a bracket glyph instead of
+  photos, the new ones are ticked, and the button says what it does: **Merge 3 Sets**, then
+  **Show in Finder**. Each set shows its own progress while merging, and the popup stays the same
+  size throughout. The folder, selections and the 16-bit TIFF option are in the page's header.
+
 ## [3.0.0] - 2026-10-30
 
 - **ShotLoft is now offcard.** A new name and a new icon: three chevrons on graphite, the same

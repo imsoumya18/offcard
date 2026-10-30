@@ -93,9 +93,11 @@ Camera Backup/                      ← the folder you chose
 
 1. On the camera, shoot with **Continuous Bracket (BRK C)** in **RAW**, for example 3 shots at
    ±2 EV.
-2. Click **HDR Merge** (on a Mac, it opens in its own window) and choose a folder. Your backup
-   folder works: every folder inside it is searched.
-3. Tick the bracketed sets it finds, and click **Merge to HDR**. Each takes about 30 seconds.
+2. Click **HDR Merge**. On a Mac, the panel slides to its HDR page and looks in your backup folder;
+   click the folder's name under the title to use another one. Every folder inside it is searched.
+   On Windows and Linux, choose a folder.
+3. The new bracketed sets are ticked for you. Click **Merge 3 Sets** (on Windows and Linux,
+   **Merge to HDR**). Each takes about 30 seconds.
 
 Results go into the day's `HDR` folder, beside `Photos` and `Videos` (in other folders, an `HDR`
 folder next to the shots). The original shots are never changed.

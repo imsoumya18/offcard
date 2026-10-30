@@ -9,7 +9,7 @@
 
 import SwiftUI
 
-/// The quiet accent the HDR window uses for progress and selection: the system graphite.
+/// The quiet accent for the login switch: the system graphite.
 let brand = Color(nsColor: .systemGray)
 
 enum Metrics {
@@ -310,28 +310,6 @@ struct PressStyle: ButtonStyle {
     }
 }
 
-extension View {
-    /// A main action in the HDR window: Liquid Glass on macOS 26, a filled button before; in graphite.
-    @ViewBuilder func mainAction(large: Bool = false) -> some View {
-        let size: ControlSize = large ? .large : .regular
-        #if compiler(>=6.2)
-        if #available(macOS 26.0, *) {
-            self.buttonStyle(.glassProminent).tint(brand).controlSize(size)
-        } else {
-            self.buttonStyle(.borderedProminent).tint(brand).controlSize(size)
-        }
-        #else
-        self.buttonStyle(.borderedProminent).tint(brand).controlSize(size)
-        #endif
-    }
-}
-
-func image(fromDataURI uri: String?) -> NSImage? {
-    guard let uri, let comma = uri.firstIndex(of: ","),
-          let data = Data(base64Encoded: String(uri[uri.index(after: comma)...])) else { return nil }
-    return NSImage(data: data)
-}
-
 /// "Backup Drive › Sony Backup" for /Volumes/Backup Drive/Photos/Sony Backup.
 func placeName(_ path: String) -> String {
     let (drive, folder) = place(path)
@@ -351,15 +329,42 @@ func place(_ path: String) -> (drive: String, folder: String?) {
 struct PanelView: View {
     @EnvironmentObject var engine: Engine
     @EnvironmentObject var model: AppModel
-    @Environment(\.openWindow) private var openWindow
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
     @State private var note: (text: String, bad: Bool)?
     @State private var loginOn = System.opensAtLogin
 
+    @State private var page = Page.backup
+    @State private var backupHeight: CGFloat = 281
+
+    enum Page { case backup, hdr }
+
     var s: J { engine.state }
 
+    /// Both pages side by side; the panel slides between them. The HDR page takes the backup
+    /// page's height, so the popup never changes size.
     var body: some View {
+        ZStack(alignment: .top) {
+            backupPage
+                .background(GeometryReader { g in Color.clear.preference(key: HeightKey.self, value: g.size.height) })
+                .offset(x: page == .hdr ? -Metrics.width : 0)
+                .allowsHitTesting(page == .backup)
+                .accessibilityHidden(page != .backup)
+            HDRPage(model: model.hdr, back: { go(.backup) })
+                .frame(width: Metrics.width, height: backupHeight)
+                .offset(x: page == .hdr ? 0 : Metrics.width)
+                .allowsHitTesting(page == .hdr)
+                .accessibilityHidden(page != .hdr)
+        }
+        .frame(width: Metrics.width, alignment: .top)
+        .clipped()
+        .onPreferenceChange(HeightKey.self) { backupHeight = $0 }
+    }
+
+    func go(_ to: Page) {
+        withAnimation(.smooth(duration: 0.32)) { page = to }
+    }
+
+    @ViewBuilder var backupPage: some View {
         let v = view
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
@@ -712,11 +717,12 @@ struct PanelView: View {
         await engine.refresh()
     }
 
-    func openHDR() {
-        dismiss()
-        openWindow(id: "hdr")
-        NSApp.activate(ignoringOtherApps: true)
-    }
+    func openHDR() { go(.hdr) }
+}
+
+struct HeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 281
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
 extension String {

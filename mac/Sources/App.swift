@@ -16,11 +16,11 @@ enum Main {
             exit(0)
         }
         if args.contains("--check") { exit(Check.run()) }
-        offcardApp.main()
+        OffcardApp.main()
     }
 }
 
-struct offcardApp: App {
+struct OffcardApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject private var model = AppModel.shared
 
@@ -31,12 +31,6 @@ struct offcardApp: App {
             Image(nsImage: model.icon)
         }
         .menuBarExtraStyle(.window)
-
-        Window("HDR Merge", id: "hdr") {
-            HDRView().environmentObject(model.engine)
-        }
-        .defaultSize(width: 760, height: 660)
-        .windowResizability(.contentMinSize)
     }
 }
 
@@ -60,6 +54,7 @@ final class AppModel: ObservableObject {
     static let shared = AppModel()
 
     let engine = Engine()
+    let hdr = HDRModel()
     @Published private(set) var icon = System.menuBarIcon()
     /// The last finished plan, so a running backup can still say where it's going.
     @Published private(set) var lastPlan = J(nil)
