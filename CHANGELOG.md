@@ -5,6 +5,12 @@ when a new version is out.
 
 offcard was called **ShotLoft** up to v0.9.1, and **Sony Import** up to v0.4.0.
 
+## [0.11.1] - 2026-10-30
+
+- **The panel's footer reads as preferences**, not features: Open at Login and Quit sit on a quiet
+  tray in smaller type, Quit highlights under the pointer (and ⌘Q works), and the version is shown
+  there too.
+
 ## [0.11.0] - 2026-10-30
 
 - **HDR Merge lives in the popup.** On a Mac, click HDR Merge and the panel slides to its page; ‹

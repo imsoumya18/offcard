@@ -302,6 +302,25 @@ struct SlotView: View {
     }
 }
 
+/// Quit, highlighted under the pointer like a menu item; ⌘Q works too.
+struct QuitButton: View {
+    @State private var hover = false
+    var body: some View {
+        Button { NSApp.terminate(nil) } label: {
+            Text("Quit").font(.system(size: 11, weight: .medium))
+                .foregroundStyle(hover ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                .padding(.horizontal, 9).frame(height: 22)
+                .background(Capsule().fill(Color.primary.opacity(hover ? 0.1 : 0)))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(PressStyle())
+        .keyboardShortcut("q")
+        .onHover { hover = $0 }
+        .animation(.easeOut(duration: 0.12), value: hover)
+        .help("Quit offcard (⌘Q)")
+    }
+}
+
 /// Buttons dim a touch while pressed.
 struct PressStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
@@ -655,22 +674,32 @@ struct PanelView: View {
         return n > 0 ? "\(plural(n, "new set"))" : nil
     }
 
-    // MARK: the footer, like Wi-Fi's
+    // MARK: the footer: preferences, not features
 
+    /// A quiet tray along the bottom: the login switch, the version, and Quit.
     var footer: some View {
-        HStack(spacing: 8) {
-            Toggle("Open at Login", isOn: Binding(get: { loginOn },
-                                                  set: { System.setOpensAtLogin($0); loginOn = System.opensAtLogin }))
+        HStack(spacing: 6) {
+            Toggle("Open at Login", isOn: Binding(get: { loginOn }, set: { setLogin($0) }))
                 .labelsHidden().toggleStyle(.switch).controlSize(.mini).tint(brand)
-            Text("Open at Login").font(.system(size: 12))
-            Spacer()
-            Button { NSApp.terminate(nil) } label: {
-                Text("Quit").font(.system(size: 12)).foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .help("Quit offcard \(s.version.str)")
+            Text("Open at Login").font(.system(size: 11)).foregroundStyle(.secondary)
+                .contentShape(Rectangle())
+                .onTapGesture { setLogin(!loginOn) }
+            Spacer(minLength: 6)
+            Text("v\(appVersion)").font(.system(size: 11)).monospacedDigit().foregroundStyle(.tertiary)
+                .help("The version of offcard you have")
+            QuitButton()
         }
-        .padding(.horizontal, Metrics.inset).frame(height: 34)
+        .padding(.leading, Metrics.inset).padding(.trailing, 8).frame(height: 34)
+        .background(Color.primary.opacity(0.035))
+    }
+
+    var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? s.version.str
+    }
+
+    func setLogin(_ on: Bool) {
+        System.setOpensAtLogin(on)
+        loginOn = System.opensAtLogin
     }
 
     // MARK: actions
