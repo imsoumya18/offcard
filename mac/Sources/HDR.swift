@@ -107,7 +107,7 @@ struct HDRView: View {
             ContentUnavailableView {
                 Label("Choose a Folder", systemImage: "square.stack.3d.up")
             } description: {
-                Text("ShotLoft finds the bracketed shots in it, and in every folder inside it.")
+                Text("offcard finds the bracketed shots in it, and in every folder inside it.")
             } actions: {
                 if let dest = s.dest.string {
                     Button("Use Backup Folder") { setFolder(dest) }.mainAction()

@@ -1,13 +1,13 @@
-# Developing ShotLoft
+# Developing offcard
 
-[![Build](https://img.shields.io/github/actions/workflow/status/imsoumya18/shotloft/build.yml?branch=main&label=build)](https://github.com/imsoumya18/shotloft/actions/workflows/build.yml)
+[![Build](https://img.shields.io/github/actions/workflow/status/imsoumya18/offcard/build.yml?branch=main&label=build)](https://github.com/imsoumya18/offcard/actions/workflows/build.yml)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-008787)](https://www.python.org/)
 
-ShotLoft is a desktop app made of five parts. User-facing docs are in the [README](README.md).
+offcard is a desktop app made of five parts. User-facing docs are in the [README](README.md).
 
 | Part | What it is |
 |---|---|
-| [`shotloft.py`](shotloft.py) | The app: opens the window and serves the page and its actions |
+| [`offcard.py`](offcard.py) | The app: opens the window and serves the page and its actions |
 | [`ui/index.html`](ui/index.html) | The window's contents: one page of HTML, CSS and JavaScript |
 | [`mac/`](mac) | The Mac app: a native SwiftUI menu bar app (`mac/Sources`) in front of the engine, and `mac/build.sh` to bundle them |
 | [`engine.py`](engine.py) | The engine: card detection, matching, copying, repairs, verify, eject, finding bracket sets. Standard library only, Python 3.8+ |
@@ -18,19 +18,19 @@ ShotLoft is a desktop app made of five parts. User-facing docs are in the [READM
 ```bash
 pip install pywebview                 # once, for the native window (Windows; a Mac uses it from source too)
 pip install numpy rawpy pillow        # once, for HDR merge (the app says so if they're missing)
-python3 shotloft.py            # open the page in a window
-python3 shotloft.py --browser  # open it in the browser instead
-python3 shotloft.py --serve    # no window; print the URL and token (tests)
-python3 shotloft.py --serve --agent   # the Mac app's engine: also checks cards as they go in
+python3 offcard.py            # open the page in a window
+python3 offcard.py --browser  # open it in the browser instead
+python3 offcard.py --serve    # no window; print the URL and token (tests)
+python3 offcard.py --serve --agent   # the Mac app's engine: also checks cards as they go in
 ```
 
 The Mac app (needs Xcode, and pyinstaller next to the libraries above):
 
 ```bash
-mac/build.sh dist                                  # dist/ShotLoft.app for this Mac's processor
-dist/ShotLoft.app/Contents/MacOS/ShotLoft --check  # its engine starts and answers
-SHOTLOFT_ENGINE="python3 $PWD/shotloft.py" dist/ShotLoft.app/Contents/MacOS/ShotLoft   # with the engine from source
-SHOTLOFT_DEV=1 ...                                 # skip the login item set-up (test builds)
+mac/build.sh dist                                  # dist/offcard.app for this Mac's processor
+dist/offcard.app/Contents/MacOS/offcard --check  # its engine starts and answers
+OFFCARD_ENGINE="python3 $PWD/offcard.py" dist/offcard.app/Contents/MacOS/offcard   # with the engine from source
+OFFCARD_DEV=1 ...                                 # skip the login item set-up (test builds)
 ```
 
 ## How the app works
@@ -45,12 +45,12 @@ SHOTLOFT_DEV=1 ...                                 # skip the login item set-up 
     `PROGRESS_HOOK`. HDR Merge (its scan and its merges) has its own job slot, so it can run while
     a card backs up. `/api/state` carries only a summary of it; the page fetches the sets and
     their previews once per scan from `/api/hdr/sets`.
-  - HDR Merge refuses a folder on a memory card, since ShotLoft never writes to a card.
+  - HDR Merge refuses a folder on a memory card, since offcard never writes to a card.
 - **Views.** The page opens on a list of tools (`TOOLS` in `ui/index.html`); each tool is a view,
   selected by the URL hash (`#backup`, `#hdr`). A new tool is a new entry there, a view, and its
   API routes.
-- **The Mac app (SwiftUI).** `ShotLoft.app` is a native menu bar app (`MenuBarExtra`, no Dock
-  icon) with the engine bundled inside as a helper (`Contents/Resources/engine/ShotLoftEngine`,
+- **The Mac app (SwiftUI).** `offcard.app` is a native menu bar app (`MenuBarExtra`, no Dock
+  icon) with the engine bundled inside as a helper (`Contents/Resources/engine/OffcardEngine`,
   built by PyInstaller). At launch it starts the engine with `--serve --agent`, reads its URL and
   token, and uses the same JSON API as the page. In agent mode the engine checks a card as soon as
   it goes in, and exits when the app does.
@@ -64,7 +64,7 @@ SHOTLOFT_DEV=1 ...                                 # skip the login item set-up 
     signed with an Apple Developer ID. The page and the
     app reuse a check the engine already made (`plan_for` in `/api/state`).
   - "Open at login" (`SMAppService`) is turned on once, at first launch; it's a switch under ⋯.
-  - `ShotLoft --version` prints the version (the installer uses it), and `ShotLoft --check` starts
+  - `offcard --version` prints the version (the installer uses it), and `offcard --check` starts
     the engine and asks it for its state (CI).
 - **Window.** On Windows the page opens in a native window
   ([pywebview](https://pywebview.flowrl.com/), using the system web view: WebKit on Mac, Edge
@@ -136,8 +136,8 @@ SHOTLOFT_DEV=1 ...                                 # skip the login item set-up 
   release, with a 3-second timeout.
   - It falls back to `curl` if Python can't verify HTTPS, and says nothing when offline.
   - If the release is newer than `__version__`, the app shows a banner with the update line.
-  - Turn it off with `SHOTLOFT_NO_UPDATE_CHECK=1`.
-- **Saved settings.** The backup folder is remembered in `~/.shotloft.json`.
+  - Turn it off with `OFFCARD_NO_UPDATE_CHECK=1`.
+- **Saved settings.** The backup folder is remembered in `~/.offcard.json`.
 
 ### Engine commands (internal)
 
@@ -158,7 +158,7 @@ python3 hdr.py merge OUT_DIR A.ARW B.ARW C.ARW [--tiff]  # merge one set (needs 
 
 - **Cards:** `--card PATH` (repeatable) picks specific cards. Otherwise every connected Sony card
   is used.
-- **Backup folder:** `--dest` can come from the `SHOTLOFT_DEST` environment variable instead.
+- **Backup folder:** `--dest` can come from the `OFFCARD_DEST` environment variable instead.
 - **Exit codes:**
 
   | Code | Meaning |
@@ -230,36 +230,38 @@ global roll-off, for editing.
 
 ```bash
 python3 tests/smoke_test.py python3 engine.py      # the engine
-python3 tests/app_test.py python3 shotloft.py    # the app, from source
-python3 tests/app_test.py "dist/ShotLoft.app/Contents/MacOS/ShotLoft"   # a built Mac app
+python3 tests/app_test.py python3 offcard.py    # the app, from source
+python3 tests/app_test.py "dist/offcard.app/Contents/MacOS/offcard"   # a built Mac app
 ```
 
 Test hooks:
 
 | Variable | What it does |
 |---|---|
-| `SHOTLOFT_TEST_CARDS` | Treats these folders as plugged-in cards |
-| `SHOTLOFT_TEST_FREE_BYTES` | Fakes the free space on the backup drive |
-| `SHOTLOFT_UPDATE_URL` | Uses this URL for the update check |
-| `SHOTLOFT_URL_FILE` | Writes the `--serve` URL to a file, for windowed builds without a console |
-| `SHOTLOFT_ENGINE` | Mac app: run this command as the engine instead of the bundled one |
-| `SHOTLOFT_DEV` | Mac app: skip the login item set-up |
+| `OFFCARD_TEST_CARDS` | Treats these folders as plugged-in cards |
+| `OFFCARD_TEST_FREE_BYTES` | Fakes the free space on the backup drive |
+| `OFFCARD_UPDATE_URL` | Uses this URL for the update check |
+| `OFFCARD_URL_FILE` | Writes the `--serve` URL to a file, for windowed builds without a console |
+| `OFFCARD_ENGINE` | Mac app: run this command as the engine instead of the bundled one |
+| `OFFCARD_DEV` | Mac app: skip the login item set-up |
 
-## Former name (Sony Import)
+## Former names (ShotLoft, Sony Import)
 
-ShotLoft was called **Sony Import** up to v2.0.0. The old name appears in the code in exactly three
-places, all for moving existing users over:
-- **Settings** (`engine.py`): if `~/.shotloft.json` doesn't exist yet, `~/.sony-import.json` is
-  read once, so the saved backup folder carries over.
+offcard was called **ShotLoft** up to v2.6.1, and **Sony Import** up to v2.0.0. The old names
+appear in the code only to move existing users over:
+- **Settings** (`engine.py`): if `~/.offcard.json` doesn't exist yet, `~/.shotloft.json` (or else
+  `~/.sony-import.json`) is read once, so the saved backup folder and recent folders carry over.
 - **Installers:**
-  - Until the first ShotLoft release exists, they fall back to the last `sony-import-*` release
-    files.
-  - After installing ShotLoft, they remove the old Sony Import app, but only if it's ours:
-    - Mac: checked by its bundle ID `io.github.imsoumya18.sony-import`.
-    - Windows: its own `Programs\Sony Import` folder and Start-menu entry.
-    - Linux: its menu entry.
-- GitHub redirects the old repo address (`imsoumya18/sony-import`) and old install lines to
-  `imsoumya18/shotloft`.
+  - Until the first offcard release exists, they fall back to the last `shotloft-*` release files.
+  - After installing offcard, they remove the old apps, but only if they're ours:
+    - Mac: checked by bundle ID (`io.github.imsoumya18.shotloft`, `io.github.imsoumya18.sony-import`).
+    - Windows: their own `Programs\ShotLoft` and `Programs\Sony Import` folders and Start-menu entries.
+    - Linux: their menu entries (checked by name) and `~/.local/bin` binaries.
+- GitHub redirects the old repo addresses (`imsoumya18/shotloft`, `imsoumya18/sony-import`) and
+  old install lines to `imsoumya18/offcard`, so older apps' update checks and copied install lines
+  keep working.
+- The Mac app has a new bundle ID (`io.github.imsoumya18.offcard`), so macOS asks once more for
+  access to removable volumes, and Open at Login is set up again on the first run.
 
 ## The one-line installers
 
@@ -271,29 +273,29 @@ it.
 ### macOS and Linux: [`install.sh`](install.sh)
 
 It downloads the latest release with `curl`:
-- **macOS:** unpacks `ShotLoft.app` with `ditto`, keeping its signature. It installs into
+- **macOS:** unpacks `offcard.app` with `ditto`, keeping its signature. It installs into
   `/Applications`, or into `~/Applications` if that isn't writable, replacing an older version. It
   refuses while the app is open.
-- **Linux:** installs `~/.local/bin/shotloft` (it opens in the browser) and an app-menu entry.
+- **Linux:** installs `~/.local/bin/offcard` (it opens in the browser) and an app-menu entry.
 
 | Variable | Default |
 |---|---|
-| `SHOTLOFT_RELEASES` | `https://github.com/imsoumya18/shotloft/releases/latest/download` |
-| `SHOTLOFT_RAW` | `https://raw.githubusercontent.com/imsoumya18/shotloft/main` (Linux icon) |
-| `SHOTLOFT_APPS_DIR` | `/Applications` (macOS) |
-| `SHOTLOFT_BIN_DIR` | `~/.local/bin` (Linux) |
-| `SHOTLOFT_NO_REVEAL` | If unset, the app is shown in Finder afterwards |
+| `OFFCARD_RELEASES` | `https://github.com/imsoumya18/offcard/releases/latest/download` |
+| `OFFCARD_RAW` | `https://raw.githubusercontent.com/imsoumya18/offcard/main` (Linux icon) |
+| `OFFCARD_APPS_DIR` | `/Applications` (macOS) |
+| `OFFCARD_BIN_DIR` | `~/.local/bin` (Linux) |
+| `OFFCARD_NO_REVEAL` | If unset, the app is shown in Finder afterwards |
 
 ### Windows: [`install.ps1`](install.ps1)
 
 It runs as `irm …/install.ps1 | iex`, in Windows PowerShell 5.1 or later:
-- It downloads `ShotLoft.exe` into `%LOCALAPPDATA%\Programs\ShotLoft`, which needs no admin
-  rights, and adds a **ShotLoft** Start-menu shortcut.
+- It downloads `offcard.exe` into `%LOCALAPPDATA%\Programs\offcard`, which needs no admin
+  rights, and adds a **offcard** Start-menu shortcut.
 - `Unblock-File` makes sure the app carries no "from the internet" mark.
 - It runs inside `& { … }` and never calls `exit`, so a failure can't close the user's PowerShell
   window.
 
-Overrides: `SHOTLOFT_RELEASES`, `SHOTLOFT_INSTALL_DIR` and `SHOTLOFT_START_MENU`.
+Overrides: `OFFCARD_RELEASES`, `OFFCARD_INSTALL_DIR` and `OFFCARD_START_MENU`.
 
 The icons are [`docs/icon.png`](docs/icon.png) (1024 px), [`docs/AppIcon.icns`](docs/AppIcon.icns)
 and [`docs/icon.ico`](docs/icon.ico), drawn in the app's teal and orange.

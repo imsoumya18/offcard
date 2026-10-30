@@ -1,20 +1,20 @@
-# ShotLoft installer for Windows. Paste this into PowerShell:
+# offcard installer for Windows. Paste this into PowerShell:
 #
-#   irm https://raw.githubusercontent.com/imsoumya18/shotloft/main/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/imsoumya18/offcard/main/install.ps1 | iex
 #
 # Downloads the latest release into your user folder (no admin rights needed) and adds
-# "ShotLoft" to the Start menu. Files downloaded this way don't get Windows' "from the
+# "offcard" to the Start menu. Files downloaded this way don't get Windows' "from the
 # internet" mark, so there's no SmartScreen warning. Run the same line again to update.
 #
-# Overrides (used by the tests): SHOTLOFT_RELEASES, SHOTLOFT_INSTALL_DIR, SHOTLOFT_START_MENU
+# Overrides (used by the tests): OFFCARD_RELEASES, OFFCARD_INSTALL_DIR, OFFCARD_START_MENU
 
 & {
     $ErrorActionPreference = 'Stop'
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
-    $releases = if ($env:SHOTLOFT_RELEASES) { $env:SHOTLOFT_RELEASES } else { 'https://github.com/imsoumya18/shotloft/releases/latest/download' }
-    $installDir = if ($env:SHOTLOFT_INSTALL_DIR) { $env:SHOTLOFT_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'Programs\ShotLoft' }
-    $startMenu = if ($env:SHOTLOFT_START_MENU) { $env:SHOTLOFT_START_MENU } else { [Environment]::GetFolderPath('Programs') }
+    $releases = if ($env:OFFCARD_RELEASES) { $env:OFFCARD_RELEASES } else { 'https://github.com/imsoumya18/offcard/releases/latest/download' }
+    $installDir = if ($env:OFFCARD_INSTALL_DIR) { $env:OFFCARD_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'Programs\offcard' }
+    $startMenu = if ($env:OFFCARD_START_MENU) { $env:OFFCARD_START_MENU } else { [Environment]::GetFolderPath('Programs') }
 
     function Step($text) { Write-Host '  > ' -ForegroundColor DarkCyan -NoNewline; Write-Host $text }
     function Fail($text) { Write-Host ''; Write-Host "  x $text" -ForegroundColor Red; Write-Host '' }
@@ -23,7 +23,7 @@
     # slow, so the file is read in 1 MB chunks and progress is shown once per percent.)
     function Get-File($url, $out) {
         # Show something at once: GitHub can take a while to answer on slow connections.
-        Write-Progress -Activity 'Downloading ShotLoft' -Status 'Connecting to GitHub...' -PercentComplete 0
+        Write-Progress -Activity 'Downloading offcard' -Status 'Connecting to GitHub...' -PercentComplete 0
         $resp = [System.Net.WebRequest]::Create($url).GetResponse()
         $total = $resp.ContentLength
         $in = $resp.GetResponseStream(); $fs = [System.IO.File]::Create($out)
@@ -34,43 +34,47 @@
                 if ($total -gt 0) {
                     $pct = [int][math]::Floor($done * 100 / $total)
                     if ($pct -ne $last) {
-                        Write-Progress -Activity 'Downloading ShotLoft' -PercentComplete $pct `
+                        Write-Progress -Activity 'Downloading offcard' -PercentComplete $pct `
                             -Status ('{0:N1} of {1:N1} MB' -f ($done / 1MB), ($total / 1MB))
                         $last = $pct
                     }
                 }
             }
         } finally { $fs.Close(); $in.Close(); $resp.Close() }
-        Write-Progress -Activity 'Downloading ShotLoft' -Completed
+        Write-Progress -Activity 'Downloading offcard' -Completed
     }
 
     # The app has to be closed to be replaced: ask before downloading, not after.
+    # offcard was called ShotLoft until v2.6.1, and Sony Import until v2.0.0.
+    $oldNames = 'ShotLoft', 'Sony Import'
+    $oldDirs = $oldNames | ForEach-Object { Join-Path $env:LOCALAPPDATA "Programs\$_" }
+
     function Wait-Closed {
-        $old = Join-Path $env:LOCALAPPDATA 'Programs\Sony Import'
         $isOpen = { @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
-            $_.Path -and ($_.Path.StartsWith($installDir, 'OrdinalIgnoreCase') -or $_.Path.StartsWith($old, 'OrdinalIgnoreCase')) }).Count -gt 0 }
+            $p = $_.Path
+            $p -and ($p.StartsWith($installDir, 'OrdinalIgnoreCase') -or
+                     @($oldDirs | Where-Object { $p.StartsWith($_, 'OrdinalIgnoreCase') }).Count -gt 0) }).Count -gt 0 }
         while (& $isOpen) {
-            Write-Host '  ! ShotLoft is open. Close it (it has to be closed to update), then press Enter' -ForegroundColor Yellow -NoNewline
+            Write-Host '  ! offcard is open. Close it (it has to be closed to update), then press Enter' -ForegroundColor Yellow -NoNewline
             Read-Host | Out-Null
         }
     }
 
     Write-Host ''
-    Write-Host '  ShotLoft installer' -ForegroundColor DarkCyan
+    Write-Host '  offcard installer' -ForegroundColor DarkCyan
     Write-Host ''
 
-    if (-not [Environment]::Is64BitOperatingSystem) { Fail 'ShotLoft needs 64-bit Windows.'; return }
+    if (-not [Environment]::Is64BitOperatingSystem) { Fail 'offcard needs 64-bit Windows.'; return }
 
     try {
         Wait-Closed
         Step 'Downloading the latest version for Windows...'
         New-Item -ItemType Directory -Force -Path $installDir | Out-Null
-        $exe = Join-Path $installDir 'ShotLoft.exe'
+        $exe = Join-Path $installDir 'offcard.exe'
         $tmp = "$exe.download"
-        # ShotLoft was called Sony Import until v2.0.0: until the first ShotLoft release exists,
-        # fall back to the last Sony Import one.
+        # Until the first offcard release exists, fall back to the last ShotLoft one.
         $got = $false
-        foreach ($name in 'shotloft-windows.exe', 'sony-import-windows.exe') {
+        foreach ($name in 'offcard-windows.exe', 'shotloft-windows.exe') {
             try { Get-File "$releases/$name" $tmp; $got = $true; break } catch { Remove-Item -Force $tmp -ErrorAction SilentlyContinue }
         }
         if (-not $got) { throw 'Download failed. Check your internet connection.' }
@@ -82,19 +86,22 @@
             Move-Item -Force -Path $tmp -Destination $exe
         } catch {
             Remove-Item -Force $tmp -ErrorAction SilentlyContinue
-            Fail 'ShotLoft is still open. Close it and run this line again.'
+            Fail 'offcard is still open. Close it and run this line again.'
             return
         }
-        # Remove the old Sony Import install (its own folder and Start menu entry), if present.
+        # Remove the old ShotLoft and Sony Import installs (their folders and Start menu entries).
         # Only in a normal install; with an explicit folder (tests, CI) nothing outside it is touched.
-        if (-not $env:SHOTLOFT_INSTALL_DIR) {
-            $oldDir = Join-Path $env:LOCALAPPDATA 'Programs\Sony Import'
-            if (Test-Path (Join-Path $oldDir '*.exe')) { Remove-Item -Recurse -Force $oldDir -ErrorAction SilentlyContinue }
+        if (-not $env:OFFCARD_INSTALL_DIR) {
+            foreach ($oldDir in $oldDirs) {
+                if (Test-Path (Join-Path $oldDir '*.exe')) { Remove-Item -Recurse -Force $oldDir -ErrorAction SilentlyContinue }
+            }
         }
-        Remove-Item -Force (Join-Path $startMenu 'Sony Import.lnk') -ErrorAction SilentlyContinue
+        foreach ($oldName in $oldNames) {
+            Remove-Item -Force (Join-Path $startMenu "$oldName.lnk") -ErrorAction SilentlyContinue
+        }
 
         New-Item -ItemType Directory -Force -Path $startMenu | Out-Null
-        $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $startMenu 'ShotLoft.lnk'))
+        $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $startMenu 'offcard.lnk'))
         $shortcut.TargetPath = $exe
         $shortcut.WorkingDirectory = $installDir
         $shortcut.IconLocation = "$exe,0"
@@ -106,9 +113,9 @@
     }
 
     Write-Host ''
-    Write-Host '  ShotLoft is installed.' -ForegroundColor Green
+    Write-Host '  offcard is installed.' -ForegroundColor Green
     Write-Host ''
-    Write-Host '  Open it from the Start menu: search for ' -NoNewline; Write-Host 'ShotLoft' -ForegroundColor DarkCyan
+    Write-Host '  Open it from the Start menu: search for ' -NoNewline; Write-Host 'offcard' -ForegroundColor DarkCyan
     Write-Host '  To update later, run the same line again.' -ForegroundColor DarkGray
     Write-Host ''
 }

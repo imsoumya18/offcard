@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ShotLoft</title>
+<title>offcard</title>
 <link rel="icon" href="/icon.png">
 <style>
   :root {
@@ -84,7 +84,7 @@
   <header>
     <button class="back" id="back" onclick="go('')" hidden>‹ Tools</button>
     <img src="/icon.png" alt="">
-    <h1 id="title">ShotLoft</h1>
+    <h1 id="title">offcard</h1>
     <span class="ver" id="ver"></span>
   </header>
   <div id="update"></div>
@@ -298,7 +298,7 @@ function renderHdrFolder() {
     if (put("hdrfolder", `<div class="lbl">Folder with bracketed shots</div><button onclick="hdrPick()">Choose folder</button>
       ${S.dest ? `<button onclick="hdrSetFolder(S.dest)">Use backup folder</button>` : ""}
       <input type="text" id="hdrtyped" placeholder="or paste a folder path and press Enter">
-      <div class="sub" style="margin-top:6px">Your backup folder works: ShotLoft looks through every folder inside it.</div>`, "box drop")) {
+      <div class="sub" style="margin-top:6px">Your backup folder works: offcard looks through every folder inside it.</div>`, "box drop")) {
       const inp = document.getElementById("hdrtyped");
       inp.onkeydown = e => { if (e.key === "Enter" && inp.value.trim()) hdrSetFolder(inp.value.trim()); };
     }
@@ -366,7 +366,7 @@ function render() {
   const v = view(), tool = TOOLS.find(t => t.id === v);
   for (const id of ["home", ...TOOLS.map(t => t.id)]) document.getElementById("v-" + id).hidden = (id === "home" ? v !== "" : id !== v);
   document.getElementById("back").hidden = !tool;
-  put("title", tool ? `ShotLoft <span>· ${tool.name}</span>` : "ShotLoft");
+  put("title", tool ? `offcard <span>· ${tool.name}</span>` : "offcard");
   if (!tool) renderHome();
   if (v === "backup") { renderCard(); renderFolder(); renderMain(); }
   if (v === "hdr") renderHdr();

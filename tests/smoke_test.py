@@ -155,7 +155,7 @@ def main():
         make_card(card)
 
         # Backup drive too full -> plan says so, import copies nothing and exits with code 3.
-        full = {"SHOTLOFT_TEST_FREE_BYTES": "1000"}
+        full = {"OFFCARD_TEST_FREE_BYTES": "1000"}
         plan = json.loads(run(tool + ["plan", "--dest", dest, "--card", card, "--json"], env=full))
         if plan["enough_space"] or plan["needed_bytes"] <= 0:
             sys.exit(f"FAIL: a full drive was not detected: {plan}")
@@ -167,7 +167,7 @@ def main():
         # for a failed RAW + JPG pair (a day gets a Photos, Videos or HDR folder only with files in it).
         for fails, gone in (("C0001.MP4", "Videos"), ("DSC00010.JPG", "Photos")):
             trial = os.path.join(tmp, "trial-" + gone)
-            run(tool + ["import", "--dest", trial, "--card", card], env={"SHOTLOFT_TEST_FAIL_COPY": fails}, expect=1)
+            run(tool + ["import", "--dest", trial, "--card", card], env={"OFFCARD_TEST_FAIL_COPY": fails}, expect=1)
             if os.path.exists(os.path.join(trial, *DAY, gone)) or empty_dirs(trial):
                 sys.exit(f"FAIL: a failed copy of {fails} left a folder: {empty_dirs(trial) or gone}")
 
@@ -276,11 +276,11 @@ def main():
             with open(fake, "w") as f:
                 json.dump({"tag_name": tag}, f)
             out = json.loads(run(tool + ["check-update", "--json"],
-                                 env={"SHOTLOFT_UPDATE_URL": pathlib.Path(fake).as_uri()}))
+                                 env={"OFFCARD_UPDATE_URL": pathlib.Path(fake).as_uri()}))
             if out["update_available"] != expected or out["latest"] != tag[1:]:
                 sys.exit(f"FAIL: update check with {tag}: {out}")
         missing = pathlib.Path(tmp, "nope.json").as_uri()
-        out = json.loads(run(tool + ["check-update", "--json"], env={"SHOTLOFT_UPDATE_URL": missing}))
+        out = json.loads(run(tool + ["check-update", "--json"], env={"OFFCARD_UPDATE_URL": missing}))
         if out["latest"] is not None or out["update_available"]:
             sys.exit(f"FAIL: offline update check should be quiet: {out}")
     print("PASS")

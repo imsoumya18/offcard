@@ -2,8 +2,8 @@
 """End-to-end test of the desktop app's backend, the way its page uses it.
 
 Usage:  python tests/app_test.py <command to run the app...>
-  e.g.  python tests/app_test.py python shotloft.py
-        python tests/app_test.py "dist/ShotLoft.app/Contents/MacOS/ShotLoft"
+  e.g.  python tests/app_test.py python offcard.py
+        python tests/app_test.py "dist/offcard.app/Contents/MacOS/offcard"
 
 HDR merge needs NumPy, rawpy and Pillow wherever the app runs (the built app bundles them).
 """
@@ -22,8 +22,8 @@ def main():
         os.makedirs(home)
         make_card(card)
         urlfile = os.path.join(tmp, "url.json")
-        env = {**os.environ, "HOME": home, "USERPROFILE": home, "SHOTLOFT_NO_UPDATE_CHECK": "1",
-               "SHOTLOFT_TEST_CARDS": card, "SHOTLOFT_URL_FILE": urlfile}
+        env = {**os.environ, "HOME": home, "USERPROFILE": home, "OFFCARD_NO_UPDATE_CHECK": "1",
+               "OFFCARD_TEST_CARDS": card, "OFFCARD_URL_FILE": urlfile}
         proc = subprocess.Popen(tool + ["--serve"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
             for _ in range(600):

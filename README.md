@@ -1,20 +1,20 @@
 <div align="center">
 
-<img src="docs/icon.png" alt="ShotLoft" width="128">
+<img src="docs/icon.png" alt="offcard" width="128">
 
-# ShotLoft
+# offcard
 
 **Utility tools for Sony cameras: card backup, HDR merge**
 
-[![Latest version](https://img.shields.io/github/v/release/imsoumya18/shotloft?label=version&color=008787)](https://github.com/imsoumya18/shotloft/releases/latest)
-[![Build](https://img.shields.io/github/actions/workflow/status/imsoumya18/shotloft/build.yml?branch=main&label=build)](https://github.com/imsoumya18/shotloft/actions/workflows/build.yml)
-[![Downloads](https://img.shields.io/github/downloads/imsoumya18/shotloft/total)](https://github.com/imsoumya18/shotloft/releases)
-[![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-008787)](#install)
-[![License: MIT](https://img.shields.io/github/license/imsoumya18/shotloft?color=008787)](LICENSE)
+[![Latest version](https://img.shields.io/github/v/release/imsoumya18/offcard?label=version&color=48484a)](https://github.com/imsoumya18/offcard/releases/latest)
+[![Build](https://img.shields.io/github/actions/workflow/status/imsoumya18/offcard/build.yml?branch=main&label=build)](https://github.com/imsoumya18/offcard/actions/workflows/build.yml)
+[![Downloads](https://img.shields.io/github/downloads/imsoumya18/offcard/total)](https://github.com/imsoumya18/offcard/releases)
+[![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-48484a)](#install)
+[![License: MIT](https://img.shields.io/github/license/imsoumya18/offcard?color=48484a)](LICENSE)
 
 [Install](#install) • [How to use](#how-to-use) • [Tech stack](#tech-stack) • [What's new](CHANGELOG.md)
 
-<img src="docs/launch.gif" alt="ShotLoft in the Mac menu bar: a card goes in, the panel shows what's new and the folders it goes into, Back Up fills a progress ring, then Safe to format" width="760">
+<img src="docs/launch.gif" alt="offcard in the Mac menu bar: a card goes in, the panel shows what's new and the folders it goes into, Back Up fills a progress ring, then Safe to format" width="760">
 
 </div>
 
@@ -23,16 +23,16 @@
 **Mac and Linux:** open Terminal and run
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/imsoumya18/shotloft/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/imsoumya18/offcard/main/install.sh | bash
 ```
 
 **Windows:** open PowerShell and run
 
 ```powershell
-irm https://raw.githubusercontent.com/imsoumya18/shotloft/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/imsoumya18/offcard/main/install.ps1 | iex
 ```
 
-ShotLoft then appears in Applications, the Start menu, or your app menu. Run the same line again
+offcard then appears in Applications, the Start menu, or your app menu. Run the same line again
 to update; the app tells you when a new version is out.
 
 <details>
@@ -40,10 +40,10 @@ to update; the app tells you when a new version is out.
 
 | Your computer | Download |
 |---|---|
-| Windows | [shotloft-windows.exe](https://github.com/imsoumya18/shotloft/releases/latest/download/shotloft-windows.exe) |
-| Mac, Apple chip | [shotloft-macos-apple-silicon.zip](https://github.com/imsoumya18/shotloft/releases/latest/download/shotloft-macos-apple-silicon.zip) |
-| Mac, Intel chip | [shotloft-macos-intel.zip](https://github.com/imsoumya18/shotloft/releases/latest/download/shotloft-macos-intel.zip) |
-| Linux, 64-bit | [shotloft-linux.zip](https://github.com/imsoumya18/shotloft/releases/latest/download/shotloft-linux.zip) |
+| Windows | [offcard-windows.exe](https://github.com/imsoumya18/offcard/releases/latest/download/offcard-windows.exe) |
+| Mac, Apple chip | [offcard-macos-apple-silicon.zip](https://github.com/imsoumya18/offcard/releases/latest/download/offcard-macos-apple-silicon.zip) |
+| Mac, Intel chip | [offcard-macos-intel.zip](https://github.com/imsoumya18/offcard/releases/latest/download/offcard-macos-intel.zip) |
+| Linux, 64-bit | [offcard-linux.zip](https://github.com/imsoumya18/offcard/releases/latest/download/offcard-linux.zip) |
 
 Apps downloaded in a browser get a security warning the first time. On a Mac, allow it in
 **System Settings → Privacy & Security → Open Anyway**; on Windows, click **More info → Run
@@ -52,21 +52,22 @@ anyway**. The one-line install avoids this.
 
 ## How to use
 
-**On a Mac**, ShotLoft lives in the menu bar. Click its aperture icon for a small panel: your
-memory card, where it backs up to, and HDR Merge. When you put in a card with new photos, the icon
-gets a dot. It opens at login; switch that off at the bottom of the panel.
+**On a Mac**, offcard lives in the menu bar. Click its ››› icon for a small panel: your memory
+card on the left, the drive it backs up to on the right, and HDR Merge below. When you put in a
+card with new photos, the icon gets a dot. It opens at login; switch that off at the bottom of the
+panel.
 
-**On Windows and Linux**, open ShotLoft and pick a tool.
+**On Windows and Linux**, open offcard and pick a tool.
 
 ### Card Backup
 
 1. Put the memory card in, and connect the drive you back up to.
-2. Choose where the backup goes, once: on a Mac, **Choose Folder…** in the panel (afterwards,
-   **Change** under *Back Up To* lists the folders you've used); on Windows and Linux, **Card
-   Backup**, then **Choose backup folder**.
-3. Click **Back Up**. The button says how much is new, for example **Back Up 148 Files**. Only new
-   photos and videos are copied. On a Mac, the panel first shows the folders it will create and
-   how many files go into each, and a ring fills as it copies.
+2. Choose where the backup goes, once: on a Mac, **Choose Folder…** in the panel (afterwards, click
+   the folder's name under the drive to pick another one or a recent one); on Windows and Linux,
+   **Card Backup**, then **Choose backup folder**.
+3. Click **Back Up**. The button says how much is new, for example **Back Up 148 Files**, and on a
+   Mac the panel shows the day folder it goes into first. Only new photos and videos are copied;
+   on a Mac, the card's icon becomes a ring that fills as it copies.
 4. Before formatting the card, click **Check Before Formatting** (**Check it's safe to format** on
    Windows and Linux). When it says *Safe to format*, click **Eject**.
 
@@ -116,10 +117,10 @@ How it all works, running from source and releasing: [DEVELOPMENT.md](DEVELOPMEN
 
 - Made for Sony Alpha and ZV cameras; tested on the a6600. Folder dates come from the camera's clock.
 - Your photos never leave your computer. The only internet use is checking for a new version.
-- ShotLoft was called *Sony Import* up to v2.0.0.
-- **Uninstall:** delete ShotLoft from Applications (Mac), `%LOCALAPPDATA%\Programs\ShotLoft` and
-  its Start menu shortcut (Windows), or `~/.local/bin/shotloft` and
-  `~/.local/share/applications/shotloft.desktop` (Linux). Settings are in `~/.shotloft.json`.
+- offcard was called *ShotLoft* up to v2.6.1, and *Sony Import* up to v2.0.0.
+- **Uninstall:** delete offcard from Applications (Mac), `%LOCALAPPDATA%\Programs\offcard` and
+  its Start menu shortcut (Windows), or `~/.local/bin/offcard` and
+  `~/.local/share/applications/offcard.desktop` (Linux). Settings are in `~/.offcard.json`.
 
 ## License
 

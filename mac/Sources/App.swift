@@ -1,8 +1,8 @@
-// ShotLoft for the Mac: a menu bar app (SwiftUI) in front of the ShotLoft engine.
+// offcard for the Mac: a menu bar app (SwiftUI) in front of the offcard engine.
 //
-//   ShotLoft              the menu bar app
-//   ShotLoft --version    print the version (the installer uses it)
-//   ShotLoft --check      start the engine, ask it for its state, print PASS (tests)
+//   offcard              the menu bar app
+//   offcard --version    print the version (the installer uses it)
+//   offcard --check      start the engine, ask it for its state, print PASS (tests)
 
 import Combine
 import SwiftUI
@@ -12,15 +12,15 @@ enum Main {
     static func main() {
         let args = CommandLine.arguments
         if args.contains("--version") {
-            print("shotloft \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?")")
+            print("offcard \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?")")
             exit(0)
         }
         if args.contains("--check") { exit(Check.run()) }
-        ShotLoftApp.main()
+        offcardApp.main()
     }
 }
 
-struct ShotLoftApp: App {
+struct offcardApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject private var model = AppModel.shared
 
@@ -43,7 +43,7 @@ struct ShotLoftApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ note: Notification) {
         NSApp.setActivationPolicy(.accessory)   // a menu bar app: no Dock icon
-        if ProcessInfo.processInfo.environment["SHOTLOFT_DEV"] == nil {  // development builds skip this
+        if ProcessInfo.processInfo.environment["OFFCARD_DEV"] == nil {  // development builds skip this
             System.setUpLoginItemOnce()
         }
     }
@@ -61,6 +61,8 @@ final class AppModel: ObservableObject {
 
     let engine = Engine()
     @Published private(set) var icon = System.menuBarIcon()
+    /// The last finished plan, so a running backup can still say where it's going.
+    @Published private(set) var lastPlan = J(nil)
 
     private var lastKey = ""
     private var hdrLooked = ""   // the folder, and the backup after which, HDR sets were last counted
@@ -87,6 +89,7 @@ final class AppModel: ObservableObject {
         let job = s.job, k = key(s)
         let cardsIn = !s.cards.array.isEmpty
         let planned = job.kind.str == "plan" && job.state.str == "done" && s.plan_for.json == k
+        if job.kind.str == "plan", job.state.str == "done", job.result.json != lastPlan.json { lastPlan = job.result }
 
         // A new card (or folder): check what's new, unless the engine already has.
         if !cardsIn { lastKey = "" }
@@ -123,13 +126,13 @@ final class AppModel: ObservableObject {
 /// `--check`: the bundled engine starts and answers. No window, for CI and the installer.
 enum Check {
     static func run() -> Int32 {
-        let file = FileManager.default.temporaryDirectory.appendingPathComponent("shotloft-check-\(getpid()).json")
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("offcard-check-\(getpid()).json")
         let p = Process()
-        p.executableURL = Bundle.main.resourceURL!.appendingPathComponent("engine/ShotLoftEngine")
+        p.executableURL = Bundle.main.resourceURL!.appendingPathComponent("engine/OffcardEngine")
         p.arguments = ["--serve"]
         var env = ProcessInfo.processInfo.environment
-        env["SHOTLOFT_URL_FILE"] = file.path
-        env["SHOTLOFT_NO_UPDATE_CHECK"] = "1"
+        env["OFFCARD_URL_FILE"] = file.path
+        env["OFFCARD_NO_UPDATE_CHECK"] = "1"
         p.environment = env
         p.standardOutput = FileHandle.nullDevice
         do { try p.run() } catch { print("FAIL: engine didn't start: \(error)"); return 1 }

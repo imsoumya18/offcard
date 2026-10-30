@@ -1,4 +1,4 @@
-// The ShotLoft engine (the Python app, bundled as a helper) and the app's view of its state.
+// The offcard engine (the Python app, bundled as a helper) and the app's view of its state.
 //
 // The menu bar app starts the engine with `--serve --agent`, reads its URL and per-launch token,
 // and talks to the same local JSON API the Windows and Linux page uses. The engine watches for
@@ -58,28 +58,28 @@ final class Engine: ObservableObject {
 
     func start() {
         let urlFile = FileManager.default.temporaryDirectory
-            .appendingPathComponent("shotloft-\(ProcessInfo.processInfo.processIdentifier).json")
+            .appendingPathComponent("offcard-\(ProcessInfo.processInfo.processIdentifier).json")
         try? FileManager.default.removeItem(at: urlFile)
 
         let p = Process()
         let env = ProcessInfo.processInfo.environment
-        if let dev = env["SHOTLOFT_ENGINE"], !dev.isEmpty {   // development: "python3 /path/to/shotloft.py"
+        if let dev = env["OFFCARD_ENGINE"], !dev.isEmpty {   // development: "python3 /path/to/offcard.py"
             let parts = dev.split(separator: " ").map(String.init)
             p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
             p.arguments = parts + ["--serve", "--agent"]
         } else {
-            p.executableURL = Bundle.main.resourceURL!.appendingPathComponent("engine/ShotLoftEngine")
+            p.executableURL = Bundle.main.resourceURL!.appendingPathComponent("engine/OffcardEngine")
             p.arguments = ["--serve", "--agent"]
         }
         var childEnv = env
-        childEnv["SHOTLOFT_URL_FILE"] = urlFile.path
+        childEnv["OFFCARD_URL_FILE"] = urlFile.path
         p.environment = childEnv
         p.standardOutput = FileHandle.nullDevice
         p.standardError = FileHandle.standardError
         do {
             try p.run()
         } catch {
-            failure = "ShotLoft's engine couldn't start: \(error.localizedDescription)"
+            failure = "offcard's engine couldn't start: \(error.localizedDescription)"
             return
         }
         process = p
@@ -101,12 +101,12 @@ final class Engine: ObservableObject {
                     return
                 }
                 if !p.isRunning {
-                    failure = "ShotLoft's engine stopped while starting (code \(p.terminationStatus))."
+                    failure = "offcard's engine stopped while starting (code \(p.terminationStatus))."
                     return
                 }
                 try? await Task.sleep(nanoseconds: 100_000_000)
             }
-            failure = "ShotLoft's engine didn't start in time."
+            failure = "offcard's engine didn't start in time."
         }
     }
 
@@ -135,7 +135,7 @@ final class Engine: ObservableObject {
     /// GET when body is nil, POST otherwise. Throws the engine's own message on failure.
     @discardableResult
     func call(_ path: String, _ body: [String: Any]? = nil) async throws -> J {
-        guard let base else { throw EngineError(message: "ShotLoft is still starting.") }
+        guard let base else { throw EngineError(message: "offcard is still starting.") }
         var req = URLRequest(url: base.appendingPathComponent(path))
         req.setValue(token, forHTTPHeaderField: "X-Token")
         req.timeoutInterval = 30

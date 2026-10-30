@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""ShotLoft HDR: merge a set of exposure-bracketed Sony RAW photos into one natural-looking photo.
+"""offcard HDR: merge a set of exposure-bracketed Sony RAW photos into one natural-looking photo.
 
-Needs NumPy, rawpy (LibRaw) and Pillow; the ShotLoft app bundles them. The engine (engine.py) finds
+Needs NumPy, rawpy (LibRaw) and Pillow; the offcard app bundles them. The engine (engine.py) finds
 the bracket sets; this module merges one set. How it works, in short (DEVELOPMENT.md has the why):
 
   1. Decode   each RAW to linear camera RGB. A pixel's colour counts as clipped if its RAW value is
@@ -205,7 +205,7 @@ def _engine():
     if _ENGINE is None:
         import importlib.util
         spec = importlib.util.spec_from_file_location(
-            "shotloft_engine_hdr", os.path.join(os.path.dirname(os.path.abspath(__file__)), "engine.py"))
+            "offcard_engine_hdr", os.path.join(os.path.dirname(os.path.abspath(__file__)), "engine.py"))
         _ENGINE = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(_ENGINE)
     return _ENGINE
@@ -517,7 +517,7 @@ def save_jpeg(rgb8, path, fr, quality=95):
     ex[0x010F] = "SONY"
     if m.get("model"):
         ex[0x0110] = m["model"]
-    ex[0x0131] = f"ShotLoft {_engine().__version__} HDR"
+    ex[0x0131] = f"offcard {_engine().__version__} HDR"
     ex[0x0112] = 1
     if m.get("taken"):
         ex[0x0132] = m["taken"]

@@ -12,8 +12,8 @@ cat <<'FOOT'
 
 **Install or update** (the same line does both):
 
-- **Mac / Linux** (Terminal): `curl -fsSL https://raw.githubusercontent.com/imsoumya18/shotloft/main/install.sh | bash`
-- **Windows** (PowerShell): `irm https://raw.githubusercontent.com/imsoumya18/shotloft/main/install.ps1 | iex`
+- **Mac / Linux** (Terminal): `curl -fsSL https://raw.githubusercontent.com/imsoumya18/offcard/main/install.sh | bash`
+- **Windows** (PowerShell): `irm https://raw.githubusercontent.com/imsoumya18/offcard/main/install.ps1 | iex`
 
 Or download the file for your computer below.
 FOOT

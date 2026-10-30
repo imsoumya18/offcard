@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""ShotLoft desktop app: a window on top of its engine (engine.py).
+"""offcard desktop app: a window on top of its engine (engine.py).
 
 The window is a web page (ui/index.html) served by a small HTTP server on 127.0.0.1 that only
 answers requests carrying a per-launch secret token. On macOS and Windows it opens in a native
 window (pywebview, using the system's web view). Elsewhere, or if that fails, it opens in the
 default browser and quits a little while after the page is closed.
 
-  python3 shotloft.py              open the app
-  python3 shotloft.py --browser    always use the browser
-  python3 shotloft.py --serve      no window or browser; print the URL (tests)
+  python3 offcard.py              open the app
+  python3 offcard.py --browser    always use the browser
+  python3 offcard.py --serve      no window or browser; print the URL (tests)
 """
 import http.server
 import importlib.util
@@ -39,7 +39,7 @@ for _name in ("stdout", "stderr"):  # windowed builds have no console
 
 
 def _load_engine():
-    spec = importlib.util.spec_from_file_location("shotloft_engine", os.path.join(HERE, "engine.py"))
+    spec = importlib.util.spec_from_file_location("offcard_engine", os.path.join(HERE, "engine.py"))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -48,7 +48,7 @@ def _load_engine():
 E = _load_engine()
 HDR, HDR_MISSING = None, None
 try:
-    _spec = importlib.util.spec_from_file_location("shotloft_hdr", os.path.join(HERE, "hdr.py"))
+    _spec = importlib.util.spec_from_file_location("offcard_hdr", os.path.join(HERE, "hdr.py"))
     HDR = importlib.util.module_from_spec(_spec)
     _spec.loader.exec_module(HDR)
     import rawpy, PIL.Image  # noqa: E401,F401
@@ -74,7 +74,7 @@ class App:
         self.report = None       # last run_import() result, used by "trash"
         self.last_seen = time.time()
         self.update = E.UpdateCheck()
-        self.cards_override = [c for c in os.environ.get("SHOTLOFT_TEST_CARDS", "").split(os.pathsep) if c]
+        self.cards_override = [c for c in os.environ.get("OFFCARD_TEST_CARDS", "").split(os.pathsep) if c]
 
     def cards(self):
         if self.cards_override:
@@ -194,7 +194,7 @@ def report_summary(rep):
     tot = {k: sum(d[k] for d in rep["by_day"].values()) for k in ("photos", "videos", "xml")}
     return {**tot, "files": len(rep["copied"]), "seconds": rep["seconds"],
             "errors": [{"file": os.path.basename(e["files"][0]), "error": e["error"]} for e in rep["errors"]],
-            "raw_jpg_pairs": len(rep["raw_jpg_pairs"])}
+            "raw_jpg_pairs": len(rep["raw_jpg_pairs"]), "days": list(rep["by_day"])}
 
 
 # ---------------------------------------------------------------- folder picker
@@ -420,7 +420,7 @@ def api_hdr_folder(body):
     if not os.path.isdir(path):
         raise RuntimeError("That folder doesn't exist.")
     if E.card_root(path):
-        raise RuntimeError("That folder is on a memory card, and ShotLoft never writes to a card. "
+        raise RuntimeError("That folder is on a memory card, and offcard never writes to a card. "
                            "Back the card up first (Card Backup), then merge from the backup.")
     APP.hdr_folder, APP.hdr_sets = path, None
     E.save_config({**E.load_config(), "hdr_folder": path})
@@ -554,7 +554,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         url = urllib.parse.urlparse(self.path)
         if url.path == "/":
             if urllib.parse.parse_qs(url.query).get("t", [""])[0] != TOKEN:
-                return self._send(403, b"Open ShotLoft from its app icon.", "text/plain")
+                return self._send(403, b"Open offcard from its app icon.", "text/plain")
             with open(os.path.join(HERE, "ui", "index.html"), "rb") as f:
                 page = f.read().replace(b"__TOKEN__", TOKEN.encode())
             return self._send(200, page, "text/html; charset=utf-8")
@@ -591,19 +591,19 @@ class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
 
 def main():
     mode = "window"
-    if "--browser" in sys.argv or os.environ.get("SHOTLOFT_BROWSER"):
+    if "--browser" in sys.argv or os.environ.get("OFFCARD_BROWSER"):
         mode = "browser"
     if "--serve" in sys.argv:
         mode = "serve"
     if "--version" in sys.argv:
-        print(f"shotloft {E.__version__}")
+        print(f"offcard {E.__version__}")
         return 0
     if "--hdr-selftest" in sys.argv:  # checks that the built app can merge (tests; result also to a file)
         problems = [HDR_MISSING] if HDR is None else HDR.selftest()[0]
         out = "\n".join(problems) or "PASS"
         print(out, flush=True)
-        if os.environ.get("SHOTLOFT_URL_FILE"):  # windowed builds have no console to print to
-            with open(os.environ["SHOTLOFT_URL_FILE"], "w") as f:
+        if os.environ.get("OFFCARD_URL_FILE"):  # windowed builds have no console to print to
+            with open(os.environ["OFFCARD_URL_FILE"], "w") as f:
                 f.write(out)
         return 1 if problems else 0
     server = Server(("127.0.0.1", 0), Handler)
@@ -622,8 +622,8 @@ def main():
             threading.Thread(target=follow_parent, daemon=True).start()
         info = json.dumps({"url": url, "token": TOKEN})
         print(info, flush=True)
-        if os.environ.get("SHOTLOFT_URL_FILE"):  # windowed builds have no console to print to
-            with open(os.environ["SHOTLOFT_URL_FILE"], "w") as f:
+        if os.environ.get("OFFCARD_URL_FILE"):  # windowed builds have no console to print to
+            with open(os.environ["OFFCARD_URL_FILE"], "w") as f:
                 f.write(info)
         try:
             while True:
@@ -635,14 +635,14 @@ def main():
         try:
             import webview
             global WINDOW
-            WINDOW = webview.create_window("ShotLoft", url, width=760, height=640, min_size=(620, 520))
+            WINDOW = webview.create_window("offcard", url, width=760, height=640, min_size=(620, 520))
             webview.start()
             return 0
         except Exception:
             pass  # no native web view here: fall back to the browser
 
     webbrowser.open(url)
-    print(f"ShotLoft is open in your browser: {url}\nClose the page to quit.", flush=True)
+    print(f"offcard is open in your browser: {url}\nClose the page to quit.", flush=True)
     while time.time() - APP.last_seen < 45 or (APP.job and APP.job["state"] == "running"):
         time.sleep(2)
     return 0

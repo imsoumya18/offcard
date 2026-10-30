@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""ShotLoft engine: backs up Sony camera cards into Year/Month/Day folders.
+"""offcard engine: backs up Sony camera cards into Year/Month/Day folders.
 
-This is the engine behind the ShotLoft desktop app (shotloft.py), which loads it at
+This is the engine behind the offcard desktop app (offcard.py), which loads it at
 start-up. Its commands below are internal: the app's tests and scripts use them. Users use the app.
 
 The card is only ever read, never written. "Already backed up" is decided by scanning the backup
 folder itself (each file by size + a content fingerprint), so there is no state file.
 
-Internal commands (--json for machine output; --dest can come from SHOTLOFT_DEST):
+Internal commands (--json for machine output; --dest can come from OFFCARD_DEST):
   detect  [--dest DIR]                find Sony cards; check the backup drive
   plan    --dest DIR [--card PATH..]  what is new on each card
   import  --dest DIR [--card PATH..]  copy new files, write --report
@@ -31,13 +31,14 @@ import sys
 import time
 from datetime import datetime
 
-__version__ = "2.6.1"
+__version__ = "3.0.0"
 IS_WIN = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
 TRASH = "Recycle Bin" if IS_WIN else "Trash"
-CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".shotloft.json")
-OLD_CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".sony-import.json")  # ShotLoft was called Sony Import
-DEFAULT_DEST = os.environ.get("SHOTLOFT_DEST")  # backup folder; --dest overrides
+CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".offcard.json")
+OLD_CONFIG_FILES = [os.path.join(os.path.expanduser("~"), name)   # offcard was called ShotLoft, and before
+                    for name in (".shotloft.json", ".sony-import.json")]  # that Sony Import
+DEFAULT_DEST = os.environ.get("OFFCARD_DEST")  # backup folder; --dest overrides
 MONTHS = ["", "January", "February", "March", "April", "May", "June", "July",
           "August", "September", "October", "November", "December"]
 PHOTO_EXT = {".ARW", ".JPG", ".JPEG", ".HIF", ".HEIF"}
@@ -129,7 +130,7 @@ def nice_secs(sec):
 
 # ---------------------------------------------------------------- metadata
 
-EXIF_TAGS = {  # tag -> name, for the fields ShotLoft reads (IFD0 and the Exif IFD)
+EXIF_TAGS = {  # tag -> name, for the fields offcard reads (IFD0 and the Exif IFD)
     0x0110: "model", 0x0112: "orientation", 0x0132: "datetime",
     0x829A: "exposure_time", 0x829D: "fnumber", 0x8827: "iso", 0x9003: "taken",
     0x9204: "bias", 0x920A: "focal_length", 0x9291: "subsec",
@@ -340,7 +341,7 @@ def find_brackets(folder, progress=None):
 
 
 def card_root(path):
-    """The Sony memory card that path is on, or None. ShotLoft never writes to a card."""
+    """The Sony memory card that path is on, or None. offcard never writes to a card."""
     p = os.path.abspath(path)
     while True:
         if is_sony_card(p):
@@ -426,7 +427,7 @@ def drive_of(path):
 
 
 def detect(dest=None):
-    test_cards = [c for c in os.environ.get("SHOTLOFT_TEST_CARDS", "").split(os.pathsep) if c]
+    test_cards = [c for c in os.environ.get("OFFCARD_TEST_CARDS", "").split(os.pathsep) if c]
     # Tests name their cards, and then real drives are never looked at (or asked for).
     cards = [c for c in test_cards if is_sony_card(c)] if test_cards else \
         [v for v in mounted_volumes() if is_sony_card(v)]
@@ -599,8 +600,8 @@ SPACE_MARGIN = 50 * 1024 * 1024  # keep a little room for folder entries and the
 
 def free_bytes(path):
     """Free space on the drive that holds path. The folder itself may not exist yet."""
-    if os.environ.get("SHOTLOFT_TEST_FREE_BYTES"):  # test hook: pretend the drive is this full
-        return int(os.environ["SHOTLOFT_TEST_FREE_BYTES"])
+    if os.environ.get("OFFCARD_TEST_FREE_BYTES"):  # test hook: pretend the drive is this full
+        return int(os.environ["OFFCARD_TEST_FREE_BYTES"])
     p = os.path.abspath(path)
     while not os.path.exists(p) and os.path.dirname(p) != p:
         p = os.path.dirname(p)
@@ -756,7 +757,7 @@ class Bar:
 
 def make_dirs(folder):
     """Create folder and any missing parents. Returns the ones created, deepest first, so a
-    failure can take them away again (remove_empty): ShotLoft never leaves an empty folder."""
+    failure can take them away again (remove_empty): offcard never leaves an empty folder."""
     made, p = [], os.path.abspath(folder)
     while not os.path.isdir(p):
         made.append(p)
@@ -784,7 +785,7 @@ def copy_file(src, dst, progress):
     made = make_dirs(os.path.dirname(dst))
     tmp = dst + ".partial"
     try:
-        if os.environ.get("SHOTLOFT_TEST_FAIL_COPY") == os.path.basename(src):
+        if os.environ.get("OFFCARD_TEST_FAIL_COPY") == os.path.basename(src):
             raise IOError("test: this copy fails")
         with open(src, "rb") as fi, open(tmp, "wb") as fo:
             while True:
@@ -907,7 +908,7 @@ def print_verify(res):
                 print("    " + paint(os.path.basename(f), BOLD) + dim(f"  {why}"))
             if n > 20:
                 print("    " + dim(f"... and {n - 20} more"))
-            print("    " + dim("Run ShotLoft again to copy them, then check again."))
+            print("    " + dim("Run offcard again to copy them, then check again."))
         if st["trashed_jpg"]:
             n = len(st["trashed_jpg"])
             print("    " + dim(f"{n} JPG{'s' * (n != 1)} not in the backup because you moved "
@@ -1042,7 +1043,7 @@ def print_detect(info):
     else:
         print(f"  {_mark('bad')} Memory card    " + paint("not found", ATTN))
     if not info["dest"]:
-        print(f"  {_mark('bad')} Backup folder  " + paint("not set (use --dest or SHOTLOFT_DEST)", ATTN))
+        print(f"  {_mark('bad')} Backup folder  " + paint("not set (use --dest or OFFCARD_DEST)", ATTN))
         return
     if info["dest_drive"]:
         if info["dest_drive_connected"]:
@@ -1092,7 +1093,7 @@ def print_space(plan):
         print("\n  " + dim(f"Space: {need} needed {DOT} {free} free on {where}"))
     else:
         print("\n  " + bad(f"Not enough space: {need} needed, but only {free} is free on {where}."))
-        print("  " + dim("Free up some space there, or choose another backup folder, then run ShotLoft again."))
+        print("  " + dim("Free up some space there, or choose another backup folder, then run offcard again."))
 
 
 def print_report(rep):
@@ -1119,10 +1120,10 @@ def print_report(rep):
 
 # ---------------------------------------------------------------- update notice
 
-UPDATE_URL = os.environ.get("SHOTLOFT_UPDATE_URL",
-                            "https://api.github.com/repos/imsoumya18/shotloft/releases/latest")
-INSTALL_LINE = "curl -fsSL https://raw.githubusercontent.com/imsoumya18/shotloft/main/install.sh | bash"
-INSTALL_LINE_WIN = "irm https://raw.githubusercontent.com/imsoumya18/shotloft/main/install.ps1 | iex"
+UPDATE_URL = os.environ.get("OFFCARD_UPDATE_URL",
+                            "https://api.github.com/repos/imsoumya18/offcard/releases/latest")
+INSTALL_LINE = "curl -fsSL https://raw.githubusercontent.com/imsoumya18/offcard/main/install.sh | bash"
+INSTALL_LINE_WIN = "irm https://raw.githubusercontent.com/imsoumya18/offcard/main/install.ps1 | iex"
 
 
 def _vtuple(v):
@@ -1134,7 +1135,7 @@ def latest_version(timeout=3):
     data = None
     try:
         import urllib.request
-        req = urllib.request.Request(UPDATE_URL, headers={"User-Agent": f"shotloft/{__version__}"})
+        req = urllib.request.Request(UPDATE_URL, headers={"User-Agent": f"offcard/{__version__}"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = resp.read()
     except Exception:
@@ -1156,7 +1157,7 @@ class UpdateCheck:
 
     def __init__(self):
         self.latest = None
-        if os.environ.get("SHOTLOFT_NO_UPDATE_CHECK"):
+        if os.environ.get("OFFCARD_NO_UPDATE_CHECK"):
             self.thread = None
             return
         import threading
@@ -1173,7 +1174,7 @@ class UpdateCheck:
 
 
 def print_update(latest):
-    print("\n  " + paint(f"A new version of ShotLoft is available: v{latest}", BOLD, ACCENT)
+    print("\n  " + paint(f"A new version of offcard is available: v{latest}", BOLD, ACCENT)
           + dim(f"  (you have v{__version__})"))
     print("  " + dim(f"To update, run this line in {'PowerShell' if IS_WIN else 'Terminal'}:"))
     print("  " + paint(INSTALL_LINE_WIN if IS_WIN else INSTALL_LINE, BOLD))
@@ -1194,15 +1195,15 @@ def clean_path(text):
 
 
 def load_config():
-    """Saved settings. Settings from before the rename (Sony Import) are copied over once."""
-    for path in (CONFIG_FILE, OLD_CONFIG_FILE):
+    """Saved settings. Settings from before a rename (ShotLoft, Sony Import) are copied over once."""
+    for path in [CONFIG_FILE] + OLD_CONFIG_FILES:
         try:
             with open(path) as f:
                 cfg = json.load(f)
         except Exception:
             continue
-        if path == OLD_CONFIG_FILE:
-            save_config(cfg)  # from now on ~/.shotloft.json is used
+        if path != CONFIG_FILE:
+            save_config(cfg)  # from now on ~/.offcard.json is used
         return cfg
     return {}
 
@@ -1217,7 +1218,7 @@ def save_config(cfg):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--version", action="version", version=f"shotloft {__version__}")
+    ap.add_argument("--version", action="version", version=f"offcard {__version__}")
     sub = ap.add_subparsers(dest="cmd")
     p = sub.add_parser("detect")
     p.add_argument("--dest", default=DEFAULT_DEST)
@@ -1245,7 +1246,7 @@ def main():
     args = ap.parse_args()
 
     if args.cmd is None:
-        print("This is ShotLoft's engine. To back up a card, open the ShotLoft app from your\n"
+        print("This is offcard's engine. To back up a card, open the offcard app from your\n"
               "Applications folder, Start menu or app menu. (See DEVELOPMENT.md.)")
         return 2
     if args.cmd == "detect":
@@ -1269,11 +1270,11 @@ def main():
         if args.json:
             print(json.dumps({"current": __version__, "latest": latest, "update_available": newer}))
         elif latest is None:
-            print(f"shotloft {__version__}: could not reach GitHub to check for updates.")
+            print(f"offcard {__version__}: could not reach GitHub to check for updates.")
         elif newer:
             print_update(latest)
         else:
-            print(f"shotloft {__version__} is up to date.")
+            print(f"offcard {__version__} is up to date.")
         return 0
     if args.cmd == "trash-jpgs":
         with open(args.report) as f:
@@ -1293,7 +1294,7 @@ def main():
         return 0
 
     if not args.dest:
-        print("No backup folder: pass --dest or set SHOTLOFT_DEST.", file=sys.stderr)
+        print("No backup folder: pass --dest or set OFFCARD_DEST.", file=sys.stderr)
         return 2
     cards = args.card or detect()["cards"]
     for c in cards:

@@ -1,4 +1,4 @@
-# Builds the ShotLoft desktop app for each system and tests it. Pushing a tag like v2.0.0
+# Builds the offcard desktop app for each system and tests it. Pushing a tag like v2.0.0
 # also publishes the apps as a GitHub Release, with notes from CHANGELOG.md.
 name: build
 
@@ -35,13 +35,13 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            asset: shotloft-windows.exe
+            asset: offcard-windows.exe
           - os: macos-latest          # Apple Silicon (M1 and newer)
-            asset: shotloft-macos-apple-silicon.zip
+            asset: offcard-macos-apple-silicon.zip
           - os: macos-15-intel        # Intel Macs
-            asset: shotloft-macos-intel.zip
+            asset: offcard-macos-intel.zip
           - os: ubuntu-22.04          # older glibc, so it runs on most distros
-            asset: shotloft-linux.zip
+            asset: offcard-linux.zip
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -60,7 +60,7 @@ jobs:
       - name: Test the app from source
         run: |
           python hdr.py selftest
-          python tests/app_test.py python shotloft.py
+          python tests/app_test.py python offcard.py
 
       - name: Build the app
         shell: bash
@@ -75,15 +75,15 @@ jobs:
             macOS)
               mac/build.sh dist
               # The tests drive the engine inside the app; the app itself checks it can start it.
-              echo "APP=dist/ShotLoft.app/Contents/Resources/engine/ShotLoftEngine" >> "$GITHUB_ENV"
-              dist/ShotLoft.app/Contents/MacOS/ShotLoft --version
-              dist/ShotLoft.app/Contents/MacOS/ShotLoft --check ;;
+              echo "APP=dist/offcard.app/Contents/Resources/engine/OffcardEngine" >> "$GITHUB_ENV"
+              dist/offcard.app/Contents/MacOS/offcard --version
+              dist/offcard.app/Contents/MacOS/offcard --check ;;
             Windows)
-              pyinstaller --noconfirm --windowed --onefile --name "ShotLoft" --icon docs/icon.ico "${DATA[@]}" shotloft.py
-              echo "APP=dist/ShotLoft.exe" >> "$GITHUB_ENV" ;;
+              pyinstaller --noconfirm --windowed --onefile --name "offcard" --icon docs/icon.ico "${DATA[@]}" offcard.py
+              echo "APP=dist/offcard.exe" >> "$GITHUB_ENV" ;;
             Linux)
-              pyinstaller --noconfirm --onefile --name shotloft "${DATA[@]}" shotloft.py
-              echo "APP=dist/shotloft" >> "$GITHUB_ENV" ;;
+              pyinstaller --noconfirm --onefile --name offcard "${DATA[@]}" offcard.py
+              echo "APP=dist/offcard" >> "$GITHUB_ENV" ;;
           esac
 
       - name: Test the built app
@@ -95,9 +95,9 @@ jobs:
         run: |
           mkdir -p out
           case "$RUNNER_OS" in
-            macOS)   ditto -c -k --keepParent "dist/ShotLoft.app" "out/${{ matrix.asset }}" ;;
-            Windows) cp "dist/ShotLoft.exe" "out/${{ matrix.asset }}" ;;
-            Linux)   (cd dist && zip -q "../out/${{ matrix.asset }}" shotloft) ;;  # zip keeps the executable bit
+            macOS)   ditto -c -k --keepParent "dist/offcard.app" "out/${{ matrix.asset }}" ;;
+            Windows) cp "dist/offcard.exe" "out/${{ matrix.asset }}" ;;
+            Linux)   (cd dist && zip -q "../out/${{ matrix.asset }}" offcard) ;;  # zip keeps the executable bit
           esac
 
       - uses: actions/upload-artifact@v4
@@ -125,22 +125,22 @@ jobs:
           merge-multiple: true
       - name: Install with the one-line installer
         env:
-          SHOTLOFT_RAW: file://${{ github.workspace }}
-          SHOTLOFT_APPS_DIR: ${{ runner.temp }}/apps
-          SHOTLOFT_BIN_DIR: ${{ runner.temp }}/bin
-          SHOTLOFT_NO_REVEAL: "1"
-        run: SHOTLOFT_RELEASES="file://$PWD/out" bash -c 'cat install.sh | bash'
+          OFFCARD_RAW: file://${{ github.workspace }}
+          OFFCARD_APPS_DIR: ${{ runner.temp }}/apps
+          OFFCARD_BIN_DIR: ${{ runner.temp }}/bin
+          OFFCARD_NO_REVEAL: "1"
+        run: OFFCARD_RELEASES="file://$PWD/out" bash -c 'cat install.sh | bash'
       - name: Test the installed app
         run: |
           if [ "$RUNNER_OS" = "macOS" ]; then
-            APP="$RUNNER_TEMP/apps/ShotLoft.app"
+            APP="$RUNNER_TEMP/apps/offcard.app"
             test -f "$APP/Contents/Resources/AppIcon.icns"
             xattr -l "$APP" | grep -q quarantine && { echo "app is quarantined"; exit 1; }
-            "$APP/Contents/MacOS/ShotLoft" --check
-            python tests/app_test.py "$APP/Contents/Resources/engine/ShotLoftEngine"
+            "$APP/Contents/MacOS/offcard" --check
+            python tests/app_test.py "$APP/Contents/Resources/engine/OffcardEngine"
           else
-            test -f "$HOME/.local/share/applications/shotloft.desktop"
-            python tests/app_test.py "$RUNNER_TEMP/bin/shotloft"
+            test -f "$HOME/.local/share/applications/offcard.desktop"
+            python tests/app_test.py "$RUNNER_TEMP/bin/offcard"
           fi
 
   installer-windows:
@@ -155,22 +155,22 @@ jobs:
           python-version: "3.12"
       - uses: actions/download-artifact@v4
         with:
-          name: shotloft-windows.exe
+          name: offcard-windows.exe
           path: out
       - name: Install with the one-line installer
         shell: powershell
         env:
-          SHOTLOFT_INSTALL_DIR: ${{ runner.temp }}\ShotLoft
-          SHOTLOFT_START_MENU: ${{ runner.temp }}\StartMenu
+          OFFCARD_INSTALL_DIR: ${{ runner.temp }}\offcard
+          OFFCARD_START_MENU: ${{ runner.temp }}\StartMenu
         run: |
-          $env:SHOTLOFT_RELEASES = ([System.Uri](Resolve-Path out).Path).AbsoluteUri
+          $env:OFFCARD_RELEASES = ([System.Uri](Resolve-Path out).Path).AbsoluteUri
           Get-Content install.ps1 -Raw | Invoke-Expression
       - name: Test the installed app
         shell: powershell
         run: |
-          $exe = Join-Path $env:RUNNER_TEMP 'ShotLoft\ShotLoft.exe'
+          $exe = Join-Path $env:RUNNER_TEMP 'offcard\offcard.exe'
           if (-not (Test-Path $exe)) { throw 'the app was not installed' }
-          if (-not (Test-Path (Join-Path $env:RUNNER_TEMP 'StartMenu\ShotLoft.lnk'))) { throw 'no Start menu shortcut' }
+          if (-not (Test-Path (Join-Path $env:RUNNER_TEMP 'StartMenu\offcard.lnk'))) { throw 'no Start menu shortcut' }
           if (Get-Item $exe -Stream Zone.Identifier -ErrorAction SilentlyContinue) { throw 'the app is marked as downloaded from the internet' }
           python tests/app_test.py "$exe"
           if ($LASTEXITCODE -ne 0) { throw 'the installed app failed its test' }

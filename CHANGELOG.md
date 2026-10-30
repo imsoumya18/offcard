@@ -1,9 +1,24 @@
-# What's new in ShotLoft
+# What's new in offcard
 
 To update, run the install line from the [README](README.md#install) again. The app tells you
 when a new version is out.
 
-ShotLoft was called **Sony Import** up to v2.0.0.
+offcard was called **ShotLoft** up to v2.6.1, and **Sony Import** up to v2.0.0.
+
+## [3.0.0] - 2026-10-30
+
+- **ShotLoft is now offcard.** A new name and a new icon: three chevrons on graphite, the same
+  mark as in the menu bar. Running the install line replaces ShotLoft with offcard and keeps your
+  backup folder and recent folders. Old install lines and links still work.
+- **A new panel.** Your card on the left, the drive on the right, three chevrons between them.
+  It's centred, quieter and the same size in every state, so nothing jumps. Ink (white in dark
+  mode, black in light) marks what matters now: a card with new files, the check when it's done,
+  and the one button, which always says exactly what it does.
+- **Copying you can watch.** The card's icon turns into a ring that fills with liquid and shows
+  the percentage, the chevrons run toward the drive, and it says about how long is left. When it's
+  done, the next step is the button: Check Before Formatting, then Eject.
+- **On a Mac, macOS asks once more for access to your memory card**, because the app has a new
+  identity. Open at Login is set up again on the first run.
 
 ## [2.6.1] - 2026-10-30
 
