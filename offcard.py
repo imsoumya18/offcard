@@ -71,6 +71,7 @@ class App:
         self.thumbs = {}         # path -> (mtime, data URI)
         self.plan_key = None     # [cards, dest] the last plan was made for, so the page needn't redo it
         self.plan = None         # last build_plan() result, used by "import"
+        self.tags = {}           # day tags set for this backup: {"24Oct26": "Goa" or "" for none}
         self.report = None       # last run_import() result, used by "trash"
         self.last_seen = time.time()
         self.update = E.UpdateCheck()
@@ -139,6 +140,15 @@ def card_summary(card):
             "photos": photos, "videos": videos}
 
 
+def day_summary(rel, d):
+    name = os.path.basename(rel)
+    m = E.DAY_RE.match(name)
+    key, tag = (m.group(1), m.group(2) or "") if m else (name, "")
+    return {"folder": rel, "key": key, "tag": tag, "label": day_label(os.path.join(os.path.dirname(rel), key)),
+            "photos": d["photos"], "videos": d["videos"], "xml": d["xml"], "bytes": d["bytes"], "ids": d["ids"],
+            "new": not os.path.isdir(os.path.join(APP.dest or "", os.path.dirname(rel), name))}
+
+
 def day_label(rel):
     """'2026/10. October/17Oct26' -> '17 Oct 2026'."""
     day = os.path.basename(rel)
@@ -169,11 +179,17 @@ def folder_tree(dest, items):
 
 
 def plan_summary(plan):
+    """What the backup will do, with each day's folder named for its tag (set now, or already in
+    the backup) and the files that go into it."""
+    items, renames = E.apply_tags(plan, APP.tags)
     days = {}
-    for it in plan["items"]:
-        d = days.setdefault(E.item_folder(plan["dest"], it), [0, 0, 0])
-        for i, n in enumerate(E.item_counts(it)):
-            d[i] += n
+    for i, it in enumerate(items):
+        d = days.setdefault(E.item_folder(plan["dest"], it),
+                            {"photos": 0, "videos": 0, "xml": 0, "bytes": 0, "ids": []})
+        for k, n in zip(("photos", "videos", "xml"), E.item_counts(it)):
+            d[k] += n
+        d["bytes"] += it["size"]
+        d["ids"].append(i)
     cards = plan["cards"]
     total = lambda k: sum(c[k] for c in cards)
     return {
@@ -182,9 +198,9 @@ def plan_summary(plan):
         "already_videos": total("already_videos"), "new_files": sum(len(it["files"]) for it in plan["items"]),
         "needed_bytes": plan["needed_bytes"], "free_bytes": plan["free_bytes"],
         "enough_space": plan["enough_space"], "dest_existing_files": plan["dest_existing_files"],
-        "days": [{"folder": k, "label": day_label(k), "photos": v[0], "videos": v[1], "xml": v[2]}
-                 for k, v in days.items()],
-        "tree": folder_tree(plan["dest"], plan["items"]),
+        "days": [day_summary(k, v) for k, v in days.items()],
+        "renames": [os.path.relpath(new, plan["dest"]) for new in renames.values()],
+        "tree": folder_tree(plan["dest"], items),
         "from": min((c["from"] for c in cards if c["from"]), default=None),
         "to": max((c["to"] for c in cards if c["to"]), default=None),
     }
@@ -243,6 +259,7 @@ def api_state(_):
         "hdr_new": None if APP.hdr_sets is None else sum(not st["done"] for st in APP.hdr_sets), "update": {"latest": newer, "line": E.INSTALL_LINE_WIN if E.IS_WIN else E.INSTALL_LINE}
                                   if newer else None,
         "can_pick": True, "plan_for": APP.plan_key, "recent_dests": recent_dests(),
+        "recent_tags": E.load_config().get("recent_tags", []),
     }
 
 
@@ -297,18 +314,71 @@ def api_plan(_):
     return APP.start("plan", run)
 
 
-def api_import(_):
+def api_import(body):
+    """Back up everything, or only the chosen files ({"ids": [...]} from the plan's days)."""
     if not APP.plan or not APP.plan["items"]:
         raise RuntimeError("Nothing to back up.")
-    if not APP.plan["enough_space"]:
-        raise RuntimeError("There isn't enough space on the backup drive.")
     plan = APP.plan
+    ids = (body or {}).get("ids")
+    if ids is not None:
+        plan = E.choose(plan, [i for i in ids if isinstance(i, int)])
+        if not plan["items"]:
+            raise RuntimeError("Choose at least one file to back up.")
+    if not plan["enough_space"]:
+        raise RuntimeError("There isn't enough space on the backup drive.")
+    plan = dict(plan, tags=dict(APP.tags))
 
     def run():
-        rep = E.run_import(plan)  # folders are made as files go into them, never empty
-        APP.report, APP.plan = rep, None
+        rep = E.run_import(plan)  # renames tagged day folders, then copies; never an empty folder
+        APP.report, APP.plan, APP.tags = rep, None, {}
         return report_summary(rep)
     return APP.start("import", run)
+
+
+def api_tag(body):
+    """Tag one day of this backup: {"day": "24Oct26", "tag": "Goa"}; an empty tag removes it."""
+    if not APP.plan:
+        raise RuntimeError("Check the card first.")
+    day, tag = str(body.get("day") or ""), E.clean_tag(str(body.get("tag") or ""))
+    if not E.DAY_RE.match(day) or E.DAY_RE.match(day).group(2):
+        raise RuntimeError("That isn't a day.")
+    APP.tags[day] = tag
+    if tag:
+        cfg = E.load_config()
+        recent = [tag] + [t for t in cfg.get("recent_tags", []) if t.lower() != tag.lower()]
+        E.save_config({**cfg, "recent_tags": recent[:8]})
+    summary = plan_summary(APP.plan)
+    if APP.job and APP.job["kind"] == "plan" and APP.job["state"] == "done":
+        APP.job["result"] = summary
+    return summary
+
+
+def api_plan_items(_):
+    """Every file the plan would copy, by day, for choosing: what it is, when, and how big."""
+    if not APP.plan:
+        raise RuntimeError("Check the card first.")
+    out = []
+    for i, it in enumerate(APP.plan["items"]):
+        names = [os.path.basename(f) for f in it["files"]]
+        kind = "video" if it["kind"] == "video" else "pair" if it["kind"] == "pair" and len(names) > 1 else "photo"
+        out.append({"id": i, "day": E.day_key(it["dt"]), "kind": kind, "name": os.path.basename(it["key_file"]),
+                    "names": names, "time": it["dt"][11:19], "size": it["size"], "repair": bool(it.get("repair"))})
+    return {"items": out}
+
+
+def api_plan_thumbs(body):
+    """Small previews of the chosen plan files' photos, from the camera's own embedded JPEG."""
+    if not APP.plan:
+        raise RuntimeError("Check the card first.")
+    items, out = APP.plan["items"], {}
+    for i in body.get("ids") or []:
+        if not isinstance(i, int) or not 0 <= i < len(items) or items[i]["kind"] == "video":
+            continue
+        try:
+            out[str(i)] = thumbnail(items[i]["key_file"], 200)
+        except Exception:
+            out[str(i)] = None
+    return {"thumbs": out}
 
 
 def api_verify(_):
@@ -520,7 +590,7 @@ def api_reset(_):
     with APP.lock:
         if APP.job and APP.job["state"] == "running":
             raise RuntimeError("Something is still running.")
-        APP.job, APP.plan = None, None
+        APP.job, APP.plan, APP.tags = None, None, {}
     return {"ok": True}
 
 
@@ -528,7 +598,8 @@ ROUTES = {"/api/state": api_state, "/api/dest": api_set_dest, "/api/pick": api_p
           "/api/import": api_import, "/api/verify": api_verify, "/api/eject": api_eject,
           "/api/trash": api_trash, "/api/reset": api_reset, "/api/hdr/folder": api_hdr_folder,
           "/api/hdr/pick": api_hdr_pick, "/api/hdr/scan": api_hdr_scan, "/api/hdr/merge": api_hdr_merge,
-          "/api/hdr/sets": api_hdr_sets, "/api/reveal": api_reveal}
+          "/api/hdr/sets": api_hdr_sets, "/api/reveal": api_reveal, "/api/tag": api_tag,
+          "/api/plan/items": api_plan_items, "/api/plan/thumbs": api_plan_thumbs}
 
 
 class Handler(http.server.BaseHTTPRequestHandler):

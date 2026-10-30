@@ -31,7 +31,7 @@ import sys
 import time
 from datetime import datetime
 
-__version__ = "0.11.1"
+__version__ = "0.12.0"
 IS_WIN = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
 TRASH = "Recycle Bin" if IS_WIN else "Trash"
@@ -552,8 +552,84 @@ class DestIndex:
 
 def day_folder(dest, dt):
     d = datetime.strptime(dt[:19], "%Y:%m:%d %H:%M:%S")
-    return os.path.join(dest, f"{d.year}", f"{d.month}. {MONTHS[d.month]}",
-                        f"{d.day:02d}{MONTHS[d.month][:3]}{d.year % 100:02d}")
+    return os.path.join(dest, f"{d.year}", f"{d.month}. {MONTHS[d.month]}", day_key(dt))
+
+
+def day_key(dt):
+    """A day's folder name without its tag: '24Oct26'."""
+    d = datetime.strptime(dt[:19], "%Y:%m:%d %H:%M:%S")
+    return f"{d.day:02d}{MONTHS[d.month][:3]}{d.year % 100:02d}"
+
+
+# A day folder, with or without its tag: "24Oct26" or "24Oct26 - Birthday".
+DAY_RE = re.compile(r"^(\d{2}[A-Z][a-z]{2}\d{2})(?: - (.+))?$")
+
+
+def clean_tag(tag):
+    """A tag fit for a folder name: no slashes, colons or other characters folders can't have,
+    single spaces, at most 40 characters."""
+    t = re.sub(r'[\\/:*?"<>|\x00-\x1f]', " ", tag or "")
+    t = re.sub(r"\s+", " ", t).strip(" .-")
+    return t[:40].strip()
+
+
+def tagged_name(key, tag):
+    return f"{key} - {tag}" if tag else key
+
+
+def find_day(parent, key):
+    """The day's folder already in the backup, tagged or not, or None. A tagged one wins."""
+    try:
+        names = sorted(os.listdir(parent))
+    except OSError:
+        return None
+    plain = None
+    for name in names:
+        m = DAY_RE.match(name)
+        if m and m.group(1) == key and os.path.isdir(os.path.join(parent, name)):
+            if m.group(2):
+                return name
+            plain = name
+    return plain
+
+
+def apply_tags(plan, tags):
+    """The plan's items with each day folder named for its tag, and the folders already in the
+    backup to rename first ({old path: new path}). tags maps '24Oct26' to a tag, or to '' for no
+    tag; a day that isn't in it keeps the name its folder already has (tagged or not)."""
+    dest, renames, cache = plan["dest"], {}, {}
+
+    def resolve(path):
+        rel = os.path.relpath(path, dest).split(os.sep)
+        m = DAY_RE.match(rel[2]) if len(rel) >= 4 else None
+        if not m:
+            return path
+        key, parent = m.group(1), os.path.join(dest, rel[0], rel[1])
+        if (parent, key) not in cache:
+            existing = find_day(parent, key)
+            name = tagged_name(key, tags[key]) if key in tags else existing or rel[2]
+            if existing and existing != name and not os.path.exists(os.path.join(parent, name)):
+                renames[os.path.join(parent, existing)] = os.path.join(parent, name)
+            cache[(parent, key)] = name
+        rel[2] = cache[(parent, key)]
+        return os.path.join(dest, *rel)
+
+    items = []
+    for it in plan["items"]:
+        new = dict(it, targets=[resolve(t) for t in it["targets"]])
+        if "pair" in it:
+            new["pair"] = tuple(resolve(p) for p in it["pair"])
+        items.append(new)
+    return items, renames
+
+
+def rename_days(renames):
+    """Rename day folders in the backup for their new tags (never on a card)."""
+    for old, new in renames.items():
+        if card_root(old):
+            raise RuntimeError("offcard never writes to a memory card.")
+        if os.path.isdir(old) and not os.path.exists(new):
+            os.rename(old, new)
 
 
 def item_counts(it):
@@ -653,7 +729,18 @@ def build_plan(dest, cards):
         per_card[card] = stats
     bar.finish()
     new.sort(key=lambda it: (it["dt"], it["key_file"]))
-    photo_n, video_n = index.max_photo, index.max_video
+    number_new(new, dest, index.max_photo, index.max_video)
+    items = sorted(new + fills, key=lambda it: (it["dt"], it["key_file"]))
+    needed, free = sum(it["size"] for it in items), free_bytes(dest)
+    return {"dest": dest, "dest_existing_files": index.file_count,
+            "cards": list(per_card.values()), "items": items,
+            "photo_start": index.max_photo, "video_start": index.max_video,
+            "needed_bytes": needed, "free_bytes": free,
+            "enough_space": not items or needed + SPACE_MARGIN <= free}
+
+
+def number_new(new, dest, photo_n, video_n):
+    """Give new files their running numbers and targets, in capture order, after photo_n/video_n."""
     for it in new:
         folder = day_folder(dest, it["dt"])
         if it["kind"] == "video":
@@ -669,12 +756,17 @@ def build_plan(dest, cards):
                              for s in it["files"]]
             if it["kind"] == "pair":
                 it["pair"] = (it["targets"][1], it["targets"][0])
-    items = sorted(new + fills, key=lambda it: (it["dt"], it["key_file"]))
-    needed, free = sum(it["size"] for it in items), free_bytes(dest)
-    return {"dest": dest, "dest_existing_files": index.file_count,
-            "cards": list(per_card.values()), "items": items,
-            "needed_bytes": needed, "free_bytes": free,
-            "enough_space": not items or needed + SPACE_MARGIN <= free}
+
+
+def choose(plan, ids):
+    """The plan with only the chosen items (by position in plan['items']). New files are numbered
+    again, so the chosen ones run on without gaps; files left out get the next numbers later."""
+    chosen = [dict(plan["items"][i]) for i in sorted(set(ids)) if 0 <= i < len(plan["items"])]
+    new = [it for it in chosen if not it.get("repair")]
+    number_new(new, plan["dest"], plan.get("photo_start", 0), plan.get("video_start", 0))
+    needed = sum(it["size"] for it in chosen)
+    return dict(plan, items=chosen, needed_bytes=needed,
+                enough_space=not chosen or needed + SPACE_MARGIN <= plan["free_bytes"])
 
 
 # ---------------------------------------------------------------- copying
@@ -808,7 +900,11 @@ def copy_file(src, dst, progress):
 
 
 def run_import(plan):
-    items = plan["items"]
+    # Day folders keep the name they already have in the backup ("24Oct26 - Goa"), unless the
+    # plan carries a new tag for that day: then the folder is renamed first.
+    items, renames = apply_tags(plan, plan.get("tags", {}))
+    rename_days(renames)
+    plan = dict(plan, items=items)
     total_files = sum(len(it["files"]) for it in items)
     progress = Bar(sum(it["size"] for it in items), "Copying", ACCENT, nbytes=True,
                    files_total=total_files, log=True)

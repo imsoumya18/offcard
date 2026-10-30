@@ -112,6 +112,42 @@ def main():
             assert res["merged"] == 0 and len(res["failed"]) == 1, res
             assert not os.path.exists(os.path.join(dest, "2026", "3. March", "HDR")), "a failed merge left an HDR folder"
             assert not os.path.exists(os.path.join(dest, "2026", "3. March", "01Mar26", "HDR")), "a failed merge left an HDR folder"
+
+            # Day tags and choosing files: into a fresh folder, tag one day, back up one file of
+            # it, then the rest; everything for that day lands in "05Jan26 - Birth Day".
+            dest2 = os.path.join(tmp, "backup2")
+            assert call("/api/dest", {"path": dest2})[0] == 200
+            call("/api/reset", {})
+            call("/api/plan", {})
+            wait("plan")
+            st, items = call("/api/plan/items")
+            assert st == 200 and len(items["items"]) == 5, items
+            first = items["items"][0]
+            st, summary = call("/api/tag", {"day": first["day"], "tag": " Birth/Day: "})
+            assert st == 200, summary
+            day = next(d for d in summary["days"] if d["key"] == first["day"])
+            assert day["tag"] == "Birth Day" and day["folder"].endswith(first["day"] + " - Birth Day"), day
+            st, s = call("/api/state")
+            assert s["recent_tags"][0] == "Birth Day" and s["job"]["result"]["days"] == summary["days"], s["recent_tags"]
+            st, th = call("/api/plan/thumbs", {"ids": [first["id"]]})
+            assert st == 200 and str(first["id"]) in th["thumbs"], th
+            assert call("/api/import", {"ids": []})[0] == 400, "an empty choice must be refused"
+            call("/api/import", {"ids": [first["id"]]})
+            part = wait("import")
+            assert part["files"] == len(first["names"]) and not part["errors"], part
+            folder = os.path.join(dest2, day["folder"])
+            assert os.path.isdir(folder), sorted(os.listdir(dest2))
+            assert any(f.startswith("DSC00001.") or f.startswith("C00001") for _, _, fs in os.walk(folder) for f in fs), "the chosen file starts at 1"
+            call("/api/reset", {})
+            call("/api/plan", {})
+            rest = wait("plan")
+            assert rest["new_files"] == 5 * 0 + sum(len(i["names"]) for i in items["items"][1:]), rest
+            again = next((d for d in rest["days"] if d["key"] == first["day"]), None)
+            assert again is None or again["tag"] == "Birth Day", again
+            call("/api/import", {})
+            wait("import")
+            assert not [n for n in os.listdir(os.path.dirname(folder)) if n.startswith(first["day"]) and n != os.path.basename(folder)], \
+                "a second folder was made for a tagged day"
         finally:
             proc.terminate()
             try:

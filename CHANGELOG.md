@@ -5,6 +5,21 @@ when a new version is out.
 
 offcard was called **ShotLoft** up to v0.9.1, and **Sony Import** up to v0.4.0.
 
+## [0.12.0] - 2026-10-30
+
+- **Tag a day.** Next to the day's folder, **+ Add tag** names it for what happened: Ooty,
+  Birthday, Reunion. The folder becomes `24Oct26 - Birthday` (without a tag, still `24Oct26`).
+  A day already on the drive is renamed, with everything in it, and later backups of that day go
+  into the same tagged folder. Back from a trip with several days on the card? **Add tags ›** lists
+  each day, and each gets its own tag; your recent tags are a click away, so tagging three days
+  "Goa" is three clicks.
+- **Back up only some files.** Back Up still backs up everything in one click. Its new **⌄** has
+  Photos Only, Videos Only and **Choose Files…**: tick whole days, or open a day and pick its photos
+  and videos from small previews (RAW + JPG pairs and videos are marked). Files you leave out stay on
+  the card and show as new next time; the ones you back up are numbered without gaps.
+- On a Mac. On Windows and Linux, everything on the card is backed up into untagged day folders,
+  and days you've tagged on a Mac keep their folders.
+
 ## [0.11.1] - 2026-10-30
 
 - **The panel's footer reads as preferences**, not features: Open at Login and Quit sit on a quiet

@@ -44,6 +44,47 @@ enum System {
         NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }
 
+    // MARK: a native menu where the pointer is
+
+    struct MenuItem {
+        var title: String
+        var detail: String? = nil
+        var checked = false
+        var enabled = true
+        var run: (() -> Void)? = nil        // nil: a separator
+        static let separator = MenuItem(title: "")
+    }
+
+    /// Shows a native menu at the pointer (for the Back Up button's ⌄).
+    @MainActor
+    static func popUpMenu(_ items: [MenuItem]) {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        let target = MenuTarget()
+        for item in items {
+            guard let run = item.run else { menu.addItem(.separator()); continue }
+            let m = NSMenuItem(title: item.title, action: #selector(MenuTarget.fire(_:)), keyEquivalent: "")
+            if let detail = item.detail {
+                let text = NSMutableAttributedString(string: item.title + "  ", attributes: [.font: NSFont.menuFont(ofSize: 0)])
+                text.append(NSAttributedString(string: detail, attributes: [
+                    .font: NSFont.menuFont(ofSize: 0), .foregroundColor: NSColor.secondaryLabelColor]))
+                m.attributedTitle = text
+            }
+            m.state = item.checked ? .on : .off
+            m.isEnabled = item.enabled
+            m.target = target
+            m.representedObject = run
+            menu.addItem(m)
+        }
+        objc_setAssociatedObject(menu, &MenuTarget.key, target, .OBJC_ASSOCIATION_RETAIN)
+        menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+    }
+
+    final class MenuTarget: NSObject {
+        nonisolated(unsafe) static var key = 0
+        @objc func fire(_ sender: NSMenuItem) { (sender.representedObject as? () -> Void)?() }
+    }
+
     // MARK: the menu bar icon
 
     /// offcard's three chevrons (the app icon's mark) as a template image, with a dot when a card

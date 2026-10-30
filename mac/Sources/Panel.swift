@@ -18,7 +18,7 @@ enum Metrics {
     static let icon: CGFloat = 40                    // the card's and the drive's icons
     static let arrow: CGFloat = 44                   // the chevrons' column between the tiles
     static var tile: CGFloat { (width - 2 * inset - arrow) / 2 }
-    static let info: CGFloat = 36                    // the two centred lines, always this tall
+    static let info: CGFloat = 48                    // the two centred lines (or the tag field), always this tall
     static let slot: CGFloat = 30                    // the button row, always this tall
     static let rowIcon: CGFloat = 28
 }
@@ -258,6 +258,7 @@ struct Chevrons: View {
 /// The one thing to do next, or a quiet line in its place: always one row of the same height.
 enum Slot {
     case ink(String, () -> Void)
+    case split(String, () -> Void, () -> Void)        // the main action, and its ⌄ for the other choices
     case inkPair(String, () -> Void, String, () -> Void)
     case quiet(String, () -> Void)
     case disabled(String)
@@ -275,6 +276,21 @@ struct SlotView: View {
             case .ink(let title, let run):
                 Button(action: run) { pill(title, fg: c.paper, bg: c.ink) }
                     .buttonStyle(PressStyle()).keyboardShortcut(.defaultAction)
+            case .split(let title, let run, let more):
+                HStack(spacing: 0) {
+                    Button(action: run) {
+                        Text(title).font(.system(size: 13, weight: .semibold)).foregroundStyle(c.paper).lineLimit(1)
+                            .frame(maxWidth: .infinity).frame(height: Metrics.slot).contentShape(Rectangle())
+                    }
+                    .buttonStyle(PressStyle()).keyboardShortcut(.defaultAction)
+                    Rectangle().fill(c.paper.opacity(0.25)).frame(width: 1, height: 16)
+                    Button(action: more) {
+                        Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold)).foregroundStyle(c.paper)
+                            .frame(width: 40, height: Metrics.slot).contentShape(Rectangle())
+                    }
+                    .buttonStyle(PressStyle()).help("Back up only some files, or tag the day").accessibilityLabel("More backup choices")
+                }
+                .background(Capsule().fill(c.ink)).clipShape(Capsule())
             case .inkPair(let title, let run, let second, let run2):
                 HStack(spacing: 8) {
                     Button(action: run) { pill(title, fg: c.paper, bg: c.ink) }
@@ -352,35 +368,55 @@ struct PanelView: View {
     @State private var note: (text: String, bad: Bool)?
     @State private var loginOn = System.opensAtLogin
 
-    @State private var page = Page.backup
-    @State private var backupHeight: CGFloat = 281
+    @State private var path: [Page] = []          // the pages over the backup page, deepest last
+    @State private var backupHeight: CGFloat = 293
+    @State private var editingDay: String?         // the day whose tag is being typed on this page
 
-    enum Page { case backup, hdr }
+    enum Page: Hashable { case hdr, days, files(String) }
 
     var s: J { engine.state }
 
     /// Both pages side by side; the panel slides between them. The HDR page takes the backup
     /// page's height, so the popup never changes size.
     var body: some View {
-        ZStack(alignment: .top) {
+        ZStack(alignment: .topLeading) {
             backupPage
                 .background(GeometryReader { g in Color.clear.preference(key: HeightKey.self, value: g.size.height) })
-                .offset(x: page == .hdr ? -Metrics.width : 0)
-                .allowsHitTesting(page == .backup)
-                .accessibilityHidden(page != .backup)
-            HDRPage(model: model.hdr, back: { go(.backup) })
-                .frame(width: Metrics.width, height: backupHeight)
-                .offset(x: page == .hdr ? 0 : Metrics.width)
-                .allowsHitTesting(page == .hdr)
-                .accessibilityHidden(page != .hdr)
+                .offset(x: path.isEmpty ? 0 : -Metrics.width)
+                .allowsHitTesting(path.isEmpty)
+                .accessibilityHidden(!path.isEmpty)
+            ForEach(Array(path.enumerated()), id: \.element) { k, p in
+                page(p)
+                    .frame(width: Metrics.width, height: backupHeight)
+                    .offset(x: k == path.count - 1 ? 0 : -Metrics.width)
+                    .allowsHitTesting(k == path.count - 1)
+                    .accessibilityHidden(k != path.count - 1)
+                    .transition(.move(edge: .trailing))
+            }
         }
         .frame(width: Metrics.width, alignment: .top)
         .clipped()
         .onPreferenceChange(HeightKey.self) { backupHeight = $0 }
     }
 
-    func go(_ to: Page) {
-        withAnimation(.smooth(duration: 0.32)) { page = to }
+    @ViewBuilder func page(_ p: Page) -> some View {
+        switch p {
+        case .hdr:
+            HDRPage(model: model.hdr, back: pop)
+        case .days:
+            DaysPage(choice: model.choice, back: pop, open: { push(.files($0)) }, tag: setTag, backUp: backUp)
+        case .files(let day):
+            DayFilesPage(choice: model.choice, day: day, back: pop, backUp: backUp)
+        }
+    }
+
+    func push(_ p: Page) {
+        editingDay = nil
+        withAnimation(.smooth(duration: 0.32)) { path.append(p) }
+    }
+
+    func pop() {
+        withAnimation(.smooth(duration: 0.32)) { _ = path.popLast() }
     }
 
     @ViewBuilder var backupPage: some View {
@@ -400,6 +436,7 @@ struct PanelView: View {
             .padding(.top, 18)
 
             VStack(spacing: 4) {
+                if v.tagLine { readyInfo }
                 ForEach(Array(v.info.enumerated()), id: \.offset) { _, line in
                     line.multilineTextAlignment(.center).lineLimit(1).truncationMode(.middle)
                 }
@@ -449,6 +486,7 @@ struct PanelView: View {
         var copying = false
         var info: [Text] = []
         var infoAction: (title: String, run: () -> Void)? = nil    // a clickable second line
+        var tagLine = false                  // ready to back up: the day's folder with its tag
         var slot: Slot = .disabled("Back Up")
     }
 
@@ -531,16 +569,22 @@ struct PanelView: View {
                 v.info = [line("Nothing new since your last backup"),
                           noteLine ?? line("\(counts(card.photos.int, card.videos.int).capitalizedFirst), all on \(drive)")]
                 v.slot = .inkPair("Check Before Formatting", verify, "Eject", eject)
-            } else if !r.enough_space.bool {
-                v.cardLine = "\(r.new_files.int.formatted()) new · \(human(r.needed_bytes.double))"
+            }
+            let c = model.choice, partial = !c.everything && !c.files.isEmpty
+            let needed = partial ? c.bytes() : r.needed_bytes.double
+            if needed + 50 * 1_048_576 > r.free_bytes.double {
+                v.cardLine = "\(partial ? c.count() : r.new_files.int) new · \(human(needed))"
                 v.drive = .alert("exclamationmark"); v.driveLine = "\(human(r.free_bytes.double)) free"; v.driveBad = true
-                v.info = [line("Needs \(human(max(0, r.needed_bytes.double - r.free_bytes.double))) more on \(drive)", bad: true),
-                          line("Free some up, or choose another folder")]
-                v.slot = .quiet("Choose Another Folder…", pickBackup)
+                v.info = [line("Needs \(human(max(0, needed - r.free_bytes.double))) more on \(drive)", bad: true),
+                          line("Back up some files now, or choose another folder")]
+                v.slot = .inkPair("Choose Files…", { push(.days) }, "Change", pickBackup)
             } else {
-                v.cardLine = "\(r.new_files.int.formatted()) new · \(human(r.needed_bytes.double))"
-                v.info = destinationLines(fallback: "Filed by day on \(drive)")
-                v.slot = st == "done" ? .ink(backUpTitle(r), backUp) : .disabled("Back Up")
+                v.cardLine = partial ? "\(c.count().formatted()) of \(r.new_files.int.formatted()) new · \(human(c.bytes()))"
+                                     : "\(r.new_files.int.formatted()) new · \(human(r.needed_bytes.double))"
+                v.tagLine = true
+                let title = partial ? "Back Up \(plural(c.count(), "File"))" : backUpTitle(r)
+                v.slot = st != "done" ? .disabled("Back Up") : partial && c.count() == 0 ? .disabled("Back Up")
+                    : .split(title, backUp, moreMenu)
             }
             return v
         }
@@ -581,6 +625,105 @@ struct PanelView: View {
             return v
         }
         return v
+    }
+
+    /// Ready to back up: the day's folder, named for its tag, with "+ Add tag" (typed in place); or,
+    /// for a card with several days, how many and "Add tags ›", which opens each day on its own.
+    @ViewBuilder var readyInfo: some View {
+        let r = s.job.result, days = r.days.array, c = model.choice
+        let partial = !c.everything && !c.files.isEmpty
+        if days.count == 1, let d = days.first {
+            let key = d.key.str
+            if editingDay == key {
+                TagField(day: key, start: d.tag.str, recent: s.recent_tags.strings,
+                         commit: { setTag(key, $0); editingDay = nil }, cancel: { editingDay = nil })
+            } else {
+                HStack(spacing: 5) {
+                    folderText(d).lineLimit(1).truncationMode(.middle)
+                    if d.tag.str.isEmpty {
+                        AddTagButton { editingDay = key }
+                    } else {
+                        Button { editingDay = key } label: {
+                            Image(systemName: "pencil").font(.system(size: 10, weight: .semibold)).foregroundStyle(.tertiary)
+                                .frame(width: 18, height: 18).contentShape(Rectangle())
+                        }
+                        .buttonStyle(PressStyle()).help("Change this day's tag")
+                    }
+                }
+                secondLine(partial: partial) {
+                    line([r.new_photos.int > 0 ? "Photos \(r.new_photos.int.formatted())" : nil,
+                          r.new_videos.int > 0 ? "Videos \(r.new_videos.int.formatted())" : nil].compactMap { $0 }.joined(separator: "  ·  "))
+                }
+            }
+        } else {
+            HStack(spacing: 5) {
+                Image(systemName: "folder.fill").font(.system(size: 10.5)).foregroundStyle(.tertiary)
+                Text("\(days.count) days · \(dayRange(days.map(\.key.str)))").font(.system(size: 11.5))
+            }
+            secondLine(partial: partial) {
+                let tagged = days.filter { !$0.tag.str.isEmpty }
+                Button { push(.days) } label: {
+                    if tagged.isEmpty {
+                        (Text("Add tags  ") + Text(Image(systemName: "chevron.right")).foregroundStyle(.secondary))
+                            .font(.system(size: 11, weight: .medium)).foregroundStyle(.primary)
+                            .padding(.horizontal, 9).frame(height: 20).background(Capsule().fill(Color.primary.opacity(0.1)))
+                    } else {
+                        let names = Array(NSOrderedSet(array: tagged.map(\.tag.str))).compactMap { $0 as? String }
+                        (Text("\(tagged.count) tagged: \(names.prefix(2).joined(separator: ", "))\(names.count > 2 ? "…" : "")  ·  ").foregroundStyle(.secondary)
+                         + Text("Add tags").foregroundStyle(.primary) + Text(" ›").foregroundStyle(.secondary))
+                            .font(.system(size: 11)).lineLimit(1)
+                    }
+                }
+                .buttonStyle(PressStyle()).help("Tag each day on its own")
+            }
+        }
+    }
+
+    /// The middle's second line: a note if there is one, "N left for later · Change" when only some
+    /// files are chosen, else the given line.
+    @ViewBuilder func secondLine<Normal: View>(partial: Bool, @ViewBuilder _ normal: () -> Normal) -> some View {
+        if let n = noteLine {
+            n
+        } else if partial {
+            Button { push(.days) } label: {
+                (Text("\(plural(model.choice.totalFiles - model.choice.count(), "file")) left for later  ·  ").foregroundStyle(.secondary)
+                 + Text("Change").underline().foregroundStyle(.primary)).font(.system(size: 11))
+            }
+            .buttonStyle(.plain)
+        } else {
+            normal()
+        }
+    }
+
+    /// The day's folder as it will be: path, then its name (with the tag), and "new" if it's new.
+    func folderText(_ d: J) -> Text {
+        let parts = d.folder.str.split(separator: "/").map(String.init)
+        var t = Text(Image(systemName: "folder.fill")).foregroundStyle(.tertiary)
+            + Text("  " + parts.dropLast().joined(separator: " › ") + (parts.count > 1 ? " › " : "")).foregroundStyle(.secondary)
+            + Text(parts.last ?? "").foregroundStyle(.primary)
+        if d.new.bool { t = t + Text("  new").foregroundStyle(.secondary) }
+        return t.font(.system(size: 11.5))
+    }
+
+    /// The Back Up button's ⌄: everything (the default), only photos or videos, choosing, tagging.
+    func moreMenu() {
+        let c = model.choice, r = s.job.result, days = r.days.array
+        let photos = c.files.filter { !$0.isVideo }.reduce(0) { $0 + $1.files }
+        let videos = c.files.filter(\.isVideo).reduce(0) { $0 + $1.files }
+        var items: [System.MenuItem] = [
+            .init(title: "Everything", detail: "\(r.new_files.int)", checked: c.everything) { c.chosen = nil },
+        ]
+        if photos > 0 && videos > 0 {
+            items += [.init(title: "Photos Only", detail: "\(photos)") { c.only { !$0.isVideo } },
+                      .init(title: "Videos Only", detail: "\(videos)") { c.only(\.isVideo) }]
+        }
+        items += [.separator, .init(title: "Choose Files…") { push(.days) }, .separator]
+        if days.count == 1, let key = days.first?.key.str {
+            items.append(.init(title: days[0].tag.str.isEmpty ? "Add Tag…" : "Change Tag…") { editingDay = key })
+        } else {
+            items.append(.init(title: "Add Tags…") { push(.days) })
+        }
+        System.popUpMenu(items)
     }
 
     func line(_ s: String, bad: Bool = false) -> Text {
@@ -708,7 +851,16 @@ struct PanelView: View {
         withAnimation { note = error.map { ($0, true) } }
     }
 
-    func backUp() { note = nil; Task { await say(engine.act("/api/import")) } }
+    func backUp() {
+        note = nil
+        let c = model.choice
+        let body: [String: Any] = c.everything ? [:] : ["ids": Array(c.picked).sorted()]
+        Task { await say(engine.act("/api/import", body)) }
+    }
+
+    func setTag(_ day: String, _ tag: String) {
+        Task { await say(engine.act("/api/tag", ["day": day, "tag": tag])) }
+    }
 
     func verify() { note = nil; Task { await say(engine.act("/api/verify")) } }
 
@@ -746,7 +898,7 @@ struct PanelView: View {
         await engine.refresh()
     }
 
-    func openHDR() { go(.hdr) }
+    func openHDR() { push(.hdr) }
 }
 
 struct HeightKey: PreferenceKey {

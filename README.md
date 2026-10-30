@@ -71,6 +71,14 @@ panel.
 4. Before formatting the card, click **Check Before Formatting** (**Check it's safe to format** on
    Windows and Linux). When it says *Safe to format*, click **Eject**.
 
+On a Mac you can also, before backing up:
+- **Tag a day**, like *Birthday* or *Ooty*: click **+ Add tag** next to the day's folder. Its folder
+  becomes `24Oct26 - Birthday`, and a day that's already on the drive is renamed with everything in
+  it. A card with several days has **Add tags ›**, where each day gets its own tag.
+- **Back up only some files**: the **⌄** on the Back Up button has Photos Only, Videos Only and
+  **Choose Files…**, where you tick days or open a day and pick its photos and videos. Everything
+  is chosen until you change it; files left out stay on the card and show as new next time.
+
 The card is only ever read, never changed. Your backup folder is sorted by the day you took each
 shot, and every file gets one clean number in shooting order:
 
@@ -78,7 +86,7 @@ shot, and every file gets one clean number in shooting order:
 Camera Backup/                      ← the folder you chose
 └── 2026/
     └── 10. October/
-        └── 24Oct26/
+        └── 24Oct26 - Birthday/       ← "24Oct26" if the day has no tag
             ├── Photos/
             │   ├── DSC00001.ARW
             │   └── DSC00001.JPG      ← shot as RAW + JPG

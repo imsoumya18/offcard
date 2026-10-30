@@ -55,6 +55,7 @@ final class AppModel: ObservableObject {
 
     let engine = Engine()
     let hdr = HDRModel()
+    let choice = ChoiceModel()
     @Published private(set) var icon = System.menuBarIcon()
     /// The last finished plan, so a running backup can still say where it's going.
     @Published private(set) var lastPlan = J(nil)
@@ -85,6 +86,7 @@ final class AppModel: ObservableObject {
         let cardsIn = !s.cards.array.isEmpty
         let planned = job.kind.str == "plan" && job.state.str == "done" && s.plan_for.json == k
         if job.kind.str == "plan", job.state.str == "done", job.result.json != lastPlan.json { lastPlan = job.result }
+        choice.sync(job, engine)
 
         // A new card (or folder): check what's new, unless the engine already has.
         if !cardsIn { lastKey = "" }

@@ -36,7 +36,8 @@ OFFCARD_DEV=1 ...                                 # skip the login item set-up (
 ## How the app works
 
 - **Local server.** A small HTTP server on `127.0.0.1` (random port) serves the page and a JSON API
-  (`/api/state`, `/api/dest`, `/api/pick`, `/api/plan`, `/api/import`, `/api/verify`,
+  (`/api/state`, `/api/dest`, `/api/pick`, `/api/plan`, `/api/import` (everything, or `{"ids": [...]}`),
+  `/api/tag` (`{"day": "24Oct26", "tag": "Goa"}`), `/api/plan/items`, `/api/plan/thumbs`, `/api/verify`,
   `/api/eject`, `/api/trash`, `/api/reset`, and for HDR Merge `/api/hdr/folder`, `/api/hdr/pick`,
   `/api/hdr/scan`, `/api/hdr/sets`, `/api/hdr/merge`, `/api/reveal`).
   - Every request needs a secret token created at launch, and a `127.0.0.1` Host header, so other
