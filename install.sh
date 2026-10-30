@@ -81,7 +81,7 @@ wait_until_closed() {  # pgrep pattern: ask the user to quit the app before anyt
   done
 }
 
-# offcard was called ShotLoft until v2.6.1, and Sony Import until v2.0.0. After installing, the old
+# offcard was called ShotLoft until v0.9.1, and Sony Import until v0.4.0. After installing, the old
 # apps are removed, but only if they're ours (checked by bundle ID or menu entry).
 OLD_APPS=("ShotLoft:io.github.imsoumya18.shotloft" "Sony Import:io.github.imsoumya18.sony-import")
 

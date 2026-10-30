@@ -1,5 +1,5 @@
 #!/bin/bash
-# Prints the release notes for a version (e.g. 1.3.1): its section of CHANGELOG.md plus install
+# Prints the release notes for a version (e.g. 0.3.1): its section of CHANGELOG.md plus install
 # lines. Exits 1 if CHANGELOG.md has no section for that version.
 set -euo pipefail
 v="${1#v}"

@@ -3,9 +3,9 @@
 To update, run the install line from the [README](README.md#install) again. The app tells you
 when a new version is out.
 
-offcard was called **ShotLoft** up to v2.6.1, and **Sony Import** up to v2.0.0.
+offcard was called **ShotLoft** up to v0.9.1, and **Sony Import** up to v0.4.0.
 
-## [3.1.0] - 2026-10-30
+## [0.11.0] - 2026-10-30
 
 - **HDR Merge lives in the popup.** On a Mac, click HDR Merge and the panel slides to its page; ‹
   slides back. No more separate window. The sets are listed by day with a bracket glyph instead of
@@ -13,7 +13,7 @@ offcard was called **ShotLoft** up to v2.6.1, and **Sony Import** up to v2.0.0.
   **Show in Finder**. Each set shows its own progress while merging, and the popup stays the same
   size throughout. The folder, selections and the 16-bit TIFF option are in the page's header.
 
-## [3.0.0] - 2026-10-30
+## [0.10.0] - 2026-10-30
 
 - **ShotLoft is now offcard.** A new name and a new icon: three chevrons on graphite, the same
   mark as in the menu bar. Running the install line replaces ShotLoft with offcard and keeps your
@@ -28,14 +28,14 @@ offcard was called **ShotLoft** up to v2.6.1, and **Sony Import** up to v2.0.0.
 - **On a Mac, macOS asks once more for access to your memory card**, because the app has a new
   identity. Open at Login is set up again on the first run.
 
-## [2.6.1] - 2026-10-30
+## [0.9.1] - 2026-10-30
 
 - **A launch video** at the top of the README: card in, the folders it goes into, Back Up, safe to
   format, and HDR Merge, in 23 seconds.
 - **The README's steps match the new panel**: Change under Back Up To, the Back Up button that
   says how much is new, and Check Before Formatting.
 
-## [2.6.0] - 2026-10-30
+## [0.9.0] - 2026-10-30
 
 - **See the folders before you back up.** On a Mac, once a card is checked, the panel shows the
   folder tree the backup will create under the folder you chose: which folders are already there,
@@ -47,7 +47,7 @@ offcard was called **ShotLoft** up to v2.6.1, and **Sony Import** up to v2.0.0.
   the card.
 - **Portrait photos stand upright** in HDR Merge.
 
-## [2.5.0] - 2026-10-30
+## [0.8.0] - 2026-10-30
 
 - **Choose where each backup goes.** Under the card, "To …" lists the backup folders you've used,
   and Choose Folder… for another one, so every backup can go somewhere different.
@@ -56,14 +56,14 @@ offcard was called **ShotLoft** up to v2.6.1, and **Sony Import** up to v2.0.0.
 - **No notification requests.** macOS only allows notifications from apps signed by a registered
   Apple developer, so the menu bar icon's dot shows when a card has new photos instead.
 
-## [2.4.0] - 2026-10-29
+## [0.7.0] - 2026-10-29
 
 - **A native Mac app.** The menu bar panel and the HDR Merge window are rebuilt in SwiftUI, in the
   manner of the Mac's own menus and Photos: the newest photo on your card at the top (with the
   copy progress around it), plain rows on the system's Liquid Glass, and HDR Merge as a photo grid
   grouped by day. The panel also tells you how many bracketed sets are waiting to be merged.
 
-## [2.3.0] - 2026-10-29
+## [0.6.0] - 2026-10-29
 
 - **ShotLoft moves to the menu bar on the Mac.** Click the aperture icon for a panel on Liquid
   Glass with your card, your backup drive and the tools; there's no window or Dock icon to manage.
@@ -74,7 +74,7 @@ offcard was called **ShotLoft** up to v2.6.1, and **Sony Import** up to v2.0.0.
   results, `HDR`, and only the ones with files in them. Photos you already backed up stay where
   they are and are still recognised, so nothing is copied twice.
 
-## [2.2.0] - 2026-10-24
+## [0.5.0] - 2026-10-24
 
 - **A home for every tool.** ShotLoft now opens on its tools, **Card Backup** and **HDR Merge**,
   so you pick what you want to do. More tools will join them.
@@ -85,21 +85,21 @@ offcard was called **ShotLoft** up to v2.6.1, and **Sony Import** up to v2.0.0.
   The result goes into an `HDR` folder next to the shots, with an optional 16-bit TIFF for editing.
   Your originals are never changed.
 
-## [2.1.1] - 2026-10-24
+## [0.4.2] - 2026-10-24
 
 - **A new app icon:** a camera aperture in ShotLoft's teal and orange.
 - **The installer shows its progress straight away.** It used to sit silent on a slow
   connection. Now it counts while connecting to GitHub, then shows a progress bar with how many
   MB are done. If ShotLoft is open, it asks you to quit it before downloading, not after.
 
-## [2.1.0] - 2026-10-24
+## [0.4.1] - 2026-10-24
 
 - **Sony Import is now ShotLoft.** A new name for an app that does more than import: it backs up,
   checks, organises, and will keep growing. To switch, run the install line from the README once.
   It installs ShotLoft and removes the old Sony Import app, and your saved backup folder carries
   over.
 
-## [2.0.0] - 2026-10-24
+## [0.4.0] - 2026-10-24
 
 - **ShotLoft is now a desktop app.** One window instead of a terminal: your card and backup
   folder, what's new and what's already backed up, and one **Back up** button with a progress bar.
@@ -111,14 +111,14 @@ offcard was called **ShotLoft** up to v2.6.1, and **Sony Import** up to v2.0.0.
   deletes anything.
 - On Linux, the app opens in your web browser.
 
-## [1.3.1] - 2026-10-22
+## [0.3.1] - 2026-10-22
 
 - **Realistic time estimate** for the "safe to format" check. It used to promise about 5 minutes
   for a 22 GB card that really took about 10.
 - **Shorter question** for that check, so it fits on one line.
 - Finished progress bars no longer show "0s left".
 
-## [1.3.0] - 2026-10-22
+## [0.3.0] - 2026-10-22
 
 - **"Safe to format?" check.** Optionally checks every file on the card against your backup,
   byte by byte, and tells you clearly when it's safe to format the card in your camera, or
@@ -130,7 +130,7 @@ offcard was called **ShotLoft** up to v2.6.1, and **Sony Import** up to v2.0.0.
   warning, and ShotLoft appears in the Start menu with its own icon.
 - **The Mac window now closes** when you press Enter at the end.
 
-## [1.2.0] - 2026-10-17
+## [0.2.0] - 2026-10-17
 
 - **You choose the backup folder.** Drag it into the window or type it. Nothing is assumed, and
   the folder you used last time is offered as a shortcut.
@@ -140,12 +140,12 @@ offcard was called **ShotLoft** up to v2.6.1, and **Sony Import** up to v2.0.0.
 - **One-line install on Mac and Linux**, with no Mac security warning. ShotLoft gets its own
   app icon.
 
-## [1.1.0] - 2026-10-17
+## [0.1.1] - 2026-10-17
 
 - **Colourful, guided screens** with numbered steps.
 - **Progress bar while checking** what's already backed up, not only while copying.
 
-## [1.0.0] - 2026-10-17
+## [0.1.0] - 2026-10-17
 
 - First release. Backs up photos and videos from Sony camera cards into Year → Month → Day
   folders, skips anything already backed up, and runs on Windows, macOS and Linux with nothing

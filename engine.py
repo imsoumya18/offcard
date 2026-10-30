@@ -31,7 +31,7 @@ import sys
 import time
 from datetime import datetime
 
-__version__ = "3.1.0"
+__version__ = "0.11.0"
 IS_WIN = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
 TRASH = "Recycle Bin" if IS_WIN else "Trash"
@@ -1131,7 +1131,7 @@ def _vtuple(v):
 
 
 def latest_version(timeout=3):
-    """Latest released version on GitHub ("1.3.0"), or None when offline or unknown."""
+    """Latest released version on GitHub ("0.3.0"), or None when offline or unknown."""
     data = None
     try:
         import urllib.request

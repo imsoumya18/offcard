@@ -247,7 +247,7 @@ Test hooks:
 
 ## Former names (ShotLoft, Sony Import)
 
-offcard was called **ShotLoft** up to v2.6.1, and **Sony Import** up to v2.0.0. The old names
+offcard was called **ShotLoft** up to v0.9.1, and **Sony Import** up to v0.4.0. The old names
 appear in the code only to move existing users over:
 - **Settings** (`engine.py`): if `~/.offcard.json` doesn't exist yet, `~/.shotloft.json` (or else
   `~/.sony-import.json`) is read once, so the saved backup folder and recent folders carry over.
@@ -310,6 +310,10 @@ On every push, [GitHub Actions](.github/workflows/build.yml) runs these jobs:
 | `app` | Builds the app with PyInstaller for Windows, macOS (Apple Silicon and Intel) and Linux, and runs the app test against each build. The HDR libraries are pinned; Intel Macs get rawpy 0.25.1, its last release with Intel Mac wheels |
 | `installer`, `installer-windows` | Install the app built in the same run with the one-line installers, then run the app test against the installed copy |
 | `release` | Only for version tags, and only once all the others pass |
+
+Versions stay at **0.x.y** until offcard's public launch, which will be 1.0.0. A release with
+something new is the next minor (0.11.0 → 0.12.0); one with only fixes, polish or docs is the next
+patch (0.11.0 → 0.11.1).
 
 To publish a new version:
 1. Add a `## [X.Y.Z] - date` section to [CHANGELOG.md](CHANGELOG.md), written for users. Usually

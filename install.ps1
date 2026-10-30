@@ -45,7 +45,7 @@
     }
 
     # The app has to be closed to be replaced: ask before downloading, not after.
-    # offcard was called ShotLoft until v2.6.1, and Sony Import until v2.0.0.
+    # offcard was called ShotLoft until v0.9.1, and Sony Import until v0.4.0.
     $oldNames = 'ShotLoft', 'Sony Import'
     $oldDirs = $oldNames | ForEach-Object { Join-Path $env:LOCALAPPDATA "Programs\$_" }
 

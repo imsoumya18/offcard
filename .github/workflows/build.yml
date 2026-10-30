@@ -1,4 +1,4 @@
-# Builds the offcard desktop app for each system and tests it. Pushing a tag like v2.0.0
+# Builds the offcard desktop app for each system and tests it. Pushing a tag like v0.4.0
 # also publishes the apps as a GitHub Release, with notes from CHANGELOG.md.
 name: build
 

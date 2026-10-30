@@ -119,7 +119,7 @@ How it all works, running from source and releasing: [DEVELOPMENT.md](DEVELOPMEN
 
 - Made for Sony Alpha and ZV cameras; tested on the a6600. Folder dates come from the camera's clock.
 - Your photos never leave your computer. The only internet use is checking for a new version.
-- offcard was called *ShotLoft* up to v2.6.1, and *Sony Import* up to v2.0.0.
+- offcard was called *ShotLoft* up to v0.9.1, and *Sony Import* up to v0.4.0.
 - **Uninstall:** delete offcard from Applications (Mac), `%LOCALAPPDATA%\Programs\offcard` and
   its Start menu shortcut (Windows), or `~/.local/bin/offcard` and
   `~/.local/share/applications/offcard.desktop` (Linux). Settings are in `~/.offcard.json`.
