@@ -8,11 +8,12 @@ import json, os, subprocess, sys, tempfile, time
 
 APP = """
 import json, os, subprocess, sys
-tool, urlfile = json.loads(sys.argv[1]), sys.argv[2]
+tool, urlfile, log = json.loads(sys.argv[1]), sys.argv[2], sys.argv[3]
 env = {**os.environ, "OFFCARD_URL_FILE": urlfile, "OFFCARD_NO_UPDATE_CHECK": "1", "OFFCARD_PARENT_PID": str(os.getpid())}
-child = subprocess.Popen(tool + ["--serve", "--agent"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+child = subprocess.Popen(tool + ["--serve", "--agent"], env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=open(log, "w"))
 print(child.pid, flush=True)
-sys.stdin.read()    # lives until the test closes this
+print(child.wait(), flush=True)    # says so if the engine stops; lives until the test kills it
+sys.stdin.read()
 """
 
 
@@ -32,16 +33,18 @@ def main():
     if not tool:
         sys.exit(__doc__)
     with tempfile.TemporaryDirectory() as tmp:
-        urlfile = os.path.join(tmp, "url.json")
-        app = subprocess.Popen([sys.executable, "-c", APP, json.dumps(tool), urlfile], stdin=subprocess.PIPE,
+        urlfile, log = os.path.join(tmp, "url.json"), os.path.join(tmp, "engine.log")
+        app = subprocess.Popen([sys.executable, "-c", APP, json.dumps(tool), urlfile, log], stdin=subprocess.PIPE,
                                stdout=subprocess.PIPE, text=True, env={**os.environ, "HOME": tmp, "USERPROFILE": tmp})
         pid = int(app.stdout.readline())
         for _ in range(600):
             if os.path.exists(urlfile) and os.path.getsize(urlfile):
                 break
+            if not alive(pid):
+                sys.exit(f"FAIL: the engine stopped while starting:\n{open(log).read()}")
             time.sleep(0.1)
         else:
-            sys.exit("FAIL: the engine never started")
+            sys.exit(f"FAIL: the engine never started:\n{open(log).read()}")
         if not alive(pid):
             sys.exit("FAIL: the engine stopped while the app was running")
         json.load(open(urlfile))
