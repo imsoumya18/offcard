@@ -5,6 +5,8 @@
 # Downloads the latest release into your user folder (no admin rights needed) and adds
 # "offcard" to the Start menu. Files downloaded this way don't get Windows' "from the
 # internet" mark, so there's no SmartScreen warning. Run the same line again to update.
+# offcard's panel draws in Edge WebView2: Windows 11 has it, and the installer adds it if a
+# Windows 10 PC doesn't.
 #
 # Overrides (used by the tests): OFFCARD_RELEASES, OFFCARD_INSTALL_DIR, OFFCARD_START_MENU
 
@@ -49,13 +51,28 @@
     $oldNames = 'ShotLoft', 'Sony Import'
     $oldDirs = $oldNames | ForEach-Object { Join-Path $env:LOCALAPPDATA "Programs\$_" }
 
+    # Windows 10 PCs without the Edge web view get it from Microsoft, for this user.
+    function Install-WebView2 {
+        $id = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+        $keys = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\$id", "HKCU:\Software\Microsoft\EdgeUpdate\Clients\$id"
+        foreach ($key in $keys) {
+            $pv = (Get-ItemProperty -Path $key -Name pv -ErrorAction SilentlyContinue).pv
+            if ($pv -and $pv -ne '0.0.0.0') { return }
+        }
+        Step 'Adding the Edge web view that offcard draws in...'
+        $setup = Join-Path $env:TEMP 'MicrosoftEdgeWebview2Setup.exe'
+        Get-File 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' $setup
+        Start-Process -FilePath $setup -ArgumentList '/silent', '/install' -Wait
+        Remove-Item -Force $setup -ErrorAction SilentlyContinue
+    }
+
     function Wait-Closed {
         $isOpen = { @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
             $p = $_.Path
             $p -and ($p.StartsWith($installDir, 'OrdinalIgnoreCase') -or
                      @($oldDirs | Where-Object { $p.StartsWith($_, 'OrdinalIgnoreCase') }).Count -gt 0) }).Count -gt 0 }
         while (& $isOpen) {
-            Write-Host '  ! offcard is open. Close it (it has to be closed to update), then press Enter' -ForegroundColor Yellow -NoNewline
+            Write-Host '  ! offcard is open. Quit it (it has to be closed to update), then press Enter' -ForegroundColor Yellow -NoNewline
             Read-Host | Out-Null
         }
     }
@@ -71,22 +88,28 @@
         Step 'Downloading the latest version for Windows...'
         New-Item -ItemType Directory -Force -Path $installDir | Out-Null
         $exe = Join-Path $installDir 'offcard.exe'
-        $tmp = "$exe.download"
-        # Until the first offcard release exists, fall back to the last ShotLoft one.
-        $got = $false
-        foreach ($name in 'offcard-windows.exe', 'shotloft-windows.exe') {
-            try { Get-File "$releases/$name" $tmp; $got = $true; break } catch { Remove-Item -Force $tmp -ErrorAction SilentlyContinue }
-        }
-        if (-not $got) { throw 'Download failed. Check your internet connection.' }
-        Unblock-File -Path $tmp   # make sure nothing carries the "from the internet" mark
+        $engine = Join-Path $installDir 'engine'
+        $tmp = Join-Path $installDir 'download.zip'
+        $new = Join-Path $installDir 'download'
+        Get-File "$releases/offcard-windows.zip" $tmp
+        Remove-Item -Recurse -Force $new -ErrorAction SilentlyContinue
+        Expand-Archive -Path $tmp -DestinationPath $new
+        Remove-Item -Force $tmp
+        # make sure nothing carries the "from the internet" mark
+        Get-ChildItem -Path $new -Recurse -File | Unblock-File
+
+        Install-WebView2
 
         Wait-Closed   # in case it was opened meanwhile
         Step "Installing to $installDir ..."
         try {
-            Move-Item -Force -Path $tmp -Destination $exe
+            if (Test-Path $engine) { Remove-Item -Recurse -Force $engine }
+            Move-Item -Force -Path (Join-Path $new 'offcard.exe') -Destination $exe
+            Move-Item -Force -Path (Join-Path $new 'engine') -Destination $engine
+            Remove-Item -Recurse -Force $new
         } catch {
-            Remove-Item -Force $tmp -ErrorAction SilentlyContinue
-            Fail 'offcard is still open. Close it and run this line again.'
+            Remove-Item -Recurse -Force $new -ErrorAction SilentlyContinue
+            Fail 'offcard is still open. Quit it and run this line again.'
             return
         }
         # Remove the old ShotLoft and Sony Import installs (their folders and Start menu entries).
@@ -116,6 +139,7 @@
     Write-Host '  offcard is installed.' -ForegroundColor Green
     Write-Host ''
     Write-Host '  Open it from the Start menu: search for ' -NoNewline; Write-Host 'offcard' -ForegroundColor DarkCyan
+    Write-Host '  It lives in the tray, by the clock. Drag its icon out from behind the ^ to keep it in view.' -ForegroundColor DarkGray
     Write-Host '  To update later, run the same line again.' -ForegroundColor DarkGray
     Write-Host ''
 }

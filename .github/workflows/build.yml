@@ -29,13 +29,14 @@ jobs:
         run: python tests/smoke_test.py python engine.py
 
   app:
-    # The desktop app: a window with the web-style UI, on top of the engine.
+    # The desktop app on top of the engine: SwiftUI on a Mac, a Tauri tray app on Windows, the page
+    # in a browser on Linux.
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: windows-latest
-            asset: offcard-windows.exe
+            asset: offcard-windows.zip
           - os: macos-latest          # Apple Silicon (M1 and newer)
             asset: offcard-macos-apple-silicon.zip
           - os: macos-15-intel        # Intel Macs
@@ -61,14 +62,14 @@ jobs:
         run: |
           python hdr.py selftest
           python tests/app_test.py python offcard.py
+          python tests/agent_test.py python offcard.py
 
       - name: Build the app
         shell: bash
         run: |
           pip install pyinstaller
-          # Mac: a SwiftUI menu bar app with the engine inside (mac/build.sh). Windows: a native window
-          # (pywebview). Linux: the same page in the browser.
-          if [ "$RUNNER_OS" = "Windows" ]; then pip install pywebview; fi
+          # Mac: a SwiftUI menu bar app with the engine inside (mac/build.sh). Windows: a Tauri tray
+          # app with the engine beside it (desktop/). Linux: the page in the browser.
           SEP=":"; [ "$RUNNER_OS" = "Windows" ] && SEP=";"
           DATA=(--add-data "engine.py${SEP}." --add-data "hdr.py${SEP}." --add-data "ui${SEP}ui" --add-data "docs/icon.png${SEP}docs")
           case "$RUNNER_OS" in
@@ -79,8 +80,18 @@ jobs:
               dist/offcard.app/Contents/MacOS/offcard --version
               dist/offcard.app/Contents/MacOS/offcard --check ;;
             Windows)
-              pyinstaller --noconfirm --windowed --onefile --name "offcard" --icon docs/icon.ico "${DATA[@]}" offcard.py
-              echo "APP=dist/offcard.exe" >> "$GITHUB_ENV" ;;
+              # The engine is a console program: the app starts it with no console window, and any
+              # PowerShell it runs then shows none either.
+              pyinstaller --noconfirm --name OffcardEngine --icon docs/icon.ico "${DATA[@]}" offcard.py
+              VERSION="$(sed -n 's/^__version__ = "\(.*\)"/\1/p' engine.py)"
+              sed -i "0,/^version = .*/s//version = \"$VERSION\"/" desktop/src-tauri/Cargo.toml
+              sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" desktop/src-tauri/tauri.conf.json
+              cargo build --release --manifest-path desktop/src-tauri/Cargo.toml
+              mkdir -p dist/app
+              cp desktop/src-tauri/target/release/offcard.exe dist/app/
+              cp -R dist/OffcardEngine dist/app/engine
+              powershell -NoProfile -Command '$p = Start-Process dist/app/offcard.exe -ArgumentList "--check" -Wait -PassThru; exit $p.ExitCode'
+              echo "APP=dist/app/engine/OffcardEngine.exe" >> "$GITHUB_ENV" ;;
             Linux)
               pyinstaller --noconfirm --onefile --name offcard "${DATA[@]}" offcard.py
               echo "APP=dist/offcard" >> "$GITHUB_ENV" ;;
@@ -88,7 +99,9 @@ jobs:
 
       - name: Test the built app
         shell: bash
-        run: python tests/app_test.py "$APP"
+        run: |
+          python tests/app_test.py "$APP"
+          python tests/agent_test.py "$APP"
 
       - name: Package
         shell: bash
@@ -96,7 +109,7 @@ jobs:
           mkdir -p out
           case "$RUNNER_OS" in
             macOS)   ditto -c -k --keepParent "dist/offcard.app" "out/${{ matrix.asset }}" ;;
-            Windows) cp "dist/offcard.exe" "out/${{ matrix.asset }}" ;;
+            Windows) powershell -NoProfile -Command 'Compress-Archive -Path dist/app/* -DestinationPath out/${{ matrix.asset }}' ;;
             Linux)   (cd dist && zip -q "../out/${{ matrix.asset }}" offcard) ;;  # zip keeps the executable bit
           esac
 
@@ -155,7 +168,7 @@ jobs:
           python-version: "3.12"
       - uses: actions/download-artifact@v4
         with:
-          name: offcard-windows.exe
+          name: offcard-windows.zip
           path: out
       - name: Install with the one-line installer
         shell: powershell
@@ -172,7 +185,9 @@ jobs:
           if (-not (Test-Path $exe)) { throw 'the app was not installed' }
           if (-not (Test-Path (Join-Path $env:RUNNER_TEMP 'StartMenu\offcard.lnk'))) { throw 'no Start menu shortcut' }
           if (Get-Item $exe -Stream Zone.Identifier -ErrorAction SilentlyContinue) { throw 'the app is marked as downloaded from the internet' }
-          python tests/app_test.py "$exe"
+          $check = Start-Process $exe -ArgumentList '--check' -Wait -PassThru
+          if ($check.ExitCode -ne 0) { throw "the installed app's engine didn't answer (code $($check.ExitCode))" }
+          python tests/app_test.py (Join-Path $env:RUNNER_TEMP 'offcard\engine\OffcardEngine.exe')
           if ($LASTEXITCODE -ne 0) { throw 'the installed app failed its test' }
 
   release:

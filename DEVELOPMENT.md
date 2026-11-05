@@ -10,18 +10,20 @@ offcard is a desktop app made of five parts. User-facing docs are in the [README
 | [`offcard.py`](offcard.py) | The app: opens the window and serves the page and its actions |
 | [`ui/index.html`](ui/index.html) | The window's contents: one page of HTML, CSS and JavaScript |
 | [`mac/`](mac) | The Mac app: a native SwiftUI menu bar app (`mac/Sources`) in front of the engine, and `mac/build.sh` to bundle them |
+| [`desktop/`](desktop) | The Windows app: the panel as a web page (`desktop/panel`) in a Tauri tray app (`desktop/src-tauri`), in front of the engine |
 | [`engine.py`](engine.py) | The engine: card detection, matching, copying, repairs, verify, eject, finding bracket sets. Standard library only, Python 3.8+ |
 | [`hdr.py`](hdr.py) | HDR merge of one bracket set. Needs NumPy, rawpy (LibRaw) and Pillow, which the built app bundles |
 
 ## Run from source
 
 ```bash
-pip install pywebview                 # once, for the native window (Windows; a Mac uses it from source too)
+pip install pywebview                 # once, for the native window when running from source
 pip install numpy rawpy pillow        # once, for HDR merge (the app says so if they're missing)
 python3 offcard.py            # open the page in a window
 python3 offcard.py --browser  # open it in the browser instead
 python3 offcard.py --serve    # no window; print the URL and token (tests)
-python3 offcard.py --serve --agent   # the Mac app's engine: also checks cards as they go in
+python3 offcard.py --serve --agent   # the desktop apps' engine: also checks cards as they go in
+python3 desktop/dev.py                # the Windows panel in a browser, on the real engine, on any system
 ```
 
 The Mac app (needs Xcode, and pyinstaller next to the libraries above):
@@ -67,11 +69,25 @@ OFFCARD_DEV=1 ...                                 # skip the login item set-up (
   - "Open at login" (`SMAppService`) is turned on once, at first launch; it's a switch under ⋯.
   - `offcard --version` prints the version (the installer uses it), and `offcard --check` starts
     the engine and asks it for its state (CI).
-- **Window.** On Windows the page opens in a native window
-  ([pywebview](https://pywebview.flowrl.com/), using the system web view: WebKit on Mac, Edge
-  WebView2 on Windows). On Linux, or if that window can't start, it opens in the default browser
-  and quits about 45 seconds after the page is closed.
-- **Folder picker.** A native dialog everywhere: pywebview's in the window, otherwise AppleScript,
+- **The Windows app (Tauri).** `offcard.exe` is a tray app with no window of its own but the panel.
+  - `desktop/panel` follows the Mac panel state for state and word for word, on the same engine API.
+    `desktop/dev.py` serves it in a browser on the real engine, so its look and logic can be tried
+    on any system.
+  - `desktop/src-tauri/src/main.rs` does what a page can't: the tray icon (drawn in code: chevrons,
+    dot, ring), a frameless window placed by the tray, closing when focus leaves, folder pickers,
+    the card notification (its own small window, which doesn't take focus), starting with Windows
+    (on once, at first launch), and the engine. The page's API calls go through the app, so the
+    engine's token never reaches the page.
+  - The engine is a PyInstaller folder beside the app (`engine\OffcardEngine.exe`), started with no
+    console window. It's told the app's process id (`OFFCARD_PARENT_PID`) and leaves when the app does.
+  - `offcard --check` starts the engine and asks it for its state, and exits 0 if it answers (CI).
+  - To type-check from a Mac: `rustup target add x86_64-pc-windows-msvc`, then `cargo check --target
+    x86_64-pc-windows-msvc` in `desktop/src-tauri`. That needs an `llvm-rc` on the path. A real build
+    needs Windows, which is what CI does.
+- **Window.** Running `offcard.py` from source opens the page in a native window
+  ([pywebview](https://pywebview.flowrl.com/)) on Windows and Mac. On Linux, or if that window can't
+  start, it opens in the default browser and quits about 45 seconds after the page is closed.
+- **Folder picker.** A native dialog everywhere: the app's own on Mac and Windows, pywebview's in its window, otherwise AppleScript,
   PowerShell, `zenity` or `kdialog`. You can also paste a path.
 - **Engine loading.** The app loads `engine.py` and `hdr.py` at start-up. Because of that, the app
   imports their modules itself (the engine's standard-library ones, NumPy, rawpy and Pillow), so
@@ -290,8 +306,11 @@ It downloads the latest release with `curl`:
 ### Windows: [`install.ps1`](install.ps1)
 
 It runs as `irm …/install.ps1 | iex`, in Windows PowerShell 5.1 or later:
-- It downloads `offcard.exe` into `%LOCALAPPDATA%\Programs\offcard`, which needs no admin
-  rights, and adds a **offcard** Start-menu shortcut.
+- It downloads `offcard-windows.zip` and unpacks `offcard.exe` and its `engine` folder into
+  `%LOCALAPPDATA%\Programs\offcard`, which needs no admin rights, and adds a **offcard** Start-menu
+  shortcut.
+- It adds Microsoft's Edge WebView2 if the PC doesn't have it. Windows 11 always does; a few
+  Windows 10 PCs don't.
 - `Unblock-File` makes sure the app carries no "from the internet" mark.
 - It runs inside `& { … }` and never calls `exit`, so a failure can't close the user's PowerShell
   window.
@@ -308,7 +327,7 @@ On every push, [GitHub Actions](.github/workflows/build.yml) runs these jobs:
 | Job | What it does |
 |---|---|
 | `engine` | Engine tests from source, on Windows, macOS and Linux |
-| `app` | Builds the app with PyInstaller for Windows, macOS (Apple Silicon and Intel) and Linux, and runs the app test against each build. The HDR libraries are pinned; Intel Macs get rawpy 0.25.1, its last release with Intel Mac wheels |
+| `app` | Builds the app for Windows, macOS (Apple Silicon and Intel) and Linux, and runs the app test and the agent test against each build's engine. The HDR libraries are pinned; Intel Macs get rawpy 0.25.1, its last release with Intel Mac wheels |
 | `installer`, `installer-windows` | Install the app built in the same run with the one-line installers, then run the app test against the installed copy |
 | `release` | Only for version tags, and only once all the others pass |
 

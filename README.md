@@ -10,7 +10,7 @@
 [![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-48484a)](#install)
 [![License: MIT](https://img.shields.io/github/license/imsoumya18/offcard?color=48484a)](LICENSE)
 
-<img src="docs/launch.gif" alt="offcard in the Mac menu bar: a card goes in, the panel shows what's new and where it goes, Back Up fills a ring, then Safe to format" width="760">
+<img src="docs/launch.gif" alt="offcard on a Mac and on Windows: a card goes in, the panel shows what's new and where it goes, Back Up fills a ring, then Safe to format" width="760">
 
 </div>
 
@@ -24,18 +24,23 @@ The card is only ever read, never changed. Nothing leaves your computer.
 
 ## Install
 
+### Mac and Linux
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/imsoumya18/offcard/main/install.sh | bash   # Mac, Linux
+curl -fsSL https://raw.githubusercontent.com/imsoumya18/offcard/main/install.sh | bash
 ```
+
+### Windows
+
 ```powershell
-irm https://raw.githubusercontent.com/imsoumya18/offcard/main/install.ps1 | iex   # Windows
+irm https://raw.githubusercontent.com/imsoumya18/offcard/main/install.ps1 | iex
 ```
 
 Run it again to update. Or [download](https://github.com/imsoumya18/offcard/releases/latest) it.
 
 ## How to use
 
-On a Mac, click the **›››** icon in the menu bar.
+Click the **›››** icon in the Mac menu bar, or in the Windows tray by the clock.
 
 1. Put the card in. offcard shows what's new and the folder it goes into.
 2. Click **Back Up**.
@@ -53,8 +58,7 @@ Sony Backup/
     └── HDR/      DSC00012-00014_HDR.jpg
 ```
 
-On Windows and Linux, offcard opens as a window with the same tools; tags and picking files are
-Mac-only for now.
+On Linux, offcard opens in your browser with the same tools, except tags and picking files, for now.
 
 ---
 

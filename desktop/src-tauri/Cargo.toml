@@ -1,0 +1,30 @@
+[package]
+name = "offcard"
+version = "0.13.0"
+edition = "2021"
+description = "Back up your Sony camera card, sorted by day"
+license = "MIT"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-autostart = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-single-instance = "2"
+serde_json = "1"
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

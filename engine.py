@@ -31,7 +31,7 @@ import sys
 import time
 from datetime import datetime
 
-__version__ = "0.12.1"
+__version__ = "0.13.0"
 IS_WIN = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
 TRASH = "Recycle Bin" if IS_WIN else "Trash"
@@ -424,6 +424,18 @@ def drive_of(path):
     if len(parts) > 2 and parts[1] in ("media", "mnt"):
         return os.sep.join(parts[:3])
     return None
+
+
+def volume_label(root):
+    """A Windows drive's name ("Untitled" for E:\\), or None: elsewhere a volume's folder has its name."""
+    if not IS_WIN or not root:
+        return None
+    import ctypes
+    name = ctypes.create_unicode_buffer(261)
+    if not ctypes.windll.kernel32.GetVolumeInformationW(os.path.splitdrive(root)[0] + "\\", name, 261,
+                                                        None, None, None, None, 0):
+        return None
+    return name.value or None
 
 
 def detect(dest=None):

@@ -87,7 +87,8 @@ class App:
         with self.lock:
             if self.job and self.job["state"] == "running":
                 raise RuntimeError("Something is already running. Wait for it to finish.")
-            self.job = {"kind": kind, "state": "running", "progress": None, "result": None, "error": None}
+            self.job = {"kind": kind, "state": "running", "progress": None, "result": None, "error": None,
+                        "id": time.time()}
         job = self.job
 
         def hook(label, done, total, files_done, files_total, nbytes, elapsed):
@@ -136,7 +137,7 @@ def card_summary(card):
     items = E.scan_card(card)
     photos = sum(len(it["files"]) for it in items if it["kind"] != "video")
     videos = sum(1 for it in items if it["kind"] == "video")
-    return {"path": card, "name": os.path.basename(card.rstrip("/\\")) or card,
+    return {"path": card, "name": E.volume_label(card) or os.path.basename(card.rstrip("/\\")) or card,
             "photos": photos, "videos": videos}
 
 
@@ -252,6 +253,7 @@ def api_state(_):
         "version": E.__version__, "trash_name": E.TRASH, "file_manager": E.FILE_MANAGER,
         "cards": [card_summary(c) for c in cards],
         "dest": APP.dest, "dest_drive": info["dest_drive"],
+        "dest_label": E.volume_label(info["dest_drive"]) if info["dest_drive"] else None,
         "dest_drive_connected": info["dest_drive_connected"], "dest_exists": info["dest_exists"],
         "free_bytes": E.free_bytes(APP.dest) if APP.dest and info["dest_drive_connected"] else None,
         "job": APP.job, "hdr_job": hdr_job_brief(), "hdr_missing": HDR_MISSING, "hdr_folder": APP.hdr_folder,
@@ -566,10 +568,10 @@ def api_reveal(body):
     return {"opened": path}
 
 
-# ---------------------------------------------------------------- card watcher (Mac app)
+# ---------------------------------------------------------------- card watcher (desktop apps)
 
 def watch_cards():
-    """With --agent (the Mac menu bar app's engine): when a card goes in, check what's new on it
+    """With --agent (the desktop apps' engine): when a card goes in, check what's new on it
     straight away, so the app can tell the user and show it the moment they open the panel."""
     seen = set()
     while True:
@@ -584,6 +586,33 @@ def watch_cards():
                 api_plan({})
         except Exception:
             pass
+
+
+def follow_parent():
+    """With --agent: exit when the app that started this engine goes (the app may name itself in
+    OFFCARD_PARENT_PID). On Windows getppid() never changes, so wait on the process itself."""
+    parent = int(os.environ.get("OFFCARD_PARENT_PID") or os.getppid())
+    if E.IS_WIN:
+        import ctypes
+        k = ctypes.windll.kernel32
+        k.OpenProcess.restype = ctypes.c_void_p
+        k.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+        handle = k.OpenProcess(0x00100000, False, parent)  # SYNCHRONIZE
+        if handle:
+            k.WaitForSingleObject(handle, 0xFFFFFFFF)      # INFINITE
+    else:
+        named = "OFFCARD_PARENT_PID" in os.environ
+        while _alive(parent) if named else os.getppid() == parent:
+            time.sleep(2)
+    os._exit(0)
+
+
+def _alive(pid):
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
 
 
 def api_reset(_):
@@ -682,14 +711,8 @@ def main():
     threading.Thread(target=server.serve_forever, daemon=True).start()
 
     if mode == "serve":
-        if "--agent" in sys.argv:  # the Mac menu bar app's engine: watch cards, and go when the app goes
+        if "--agent" in sys.argv:  # the desktop apps' engine: watch cards, and go when the app goes
             threading.Thread(target=watch_cards, daemon=True).start()
-            parent = os.getppid()
-
-            def follow_parent():
-                while os.getppid() == parent:
-                    time.sleep(2)
-                os._exit(0)
             threading.Thread(target=follow_parent, daemon=True).start()
         info = json.dumps({"url": url, "token": TOKEN})
         print(info, flush=True)

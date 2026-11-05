@@ -5,6 +5,16 @@ when a new version is out.
 
 offcard was called **ShotLoft** up to v0.9.1, and **Sony Import** up to v0.4.0.
 
+## [0.13.0] - 2026-11-06
+
+- **offcard on Windows is now the same panel as on a Mac.** It lives in the tray by the clock, opens
+  above it, and closes when you click away. Back Up with its ⌄, tags, Choose Files, Check Before
+  Formatting, Eject and HDR Merge are all there, in Windows' light or dark setting. A small
+  notification says when a card with new files goes in.
+- A card and its check now always start fresh: a second card no longer shows the first card's files
+  under Choose Files (Mac too).
+- The README's install commands each have their own heading, and the launch video shows Mac and Windows.
+
 ## [0.12.1] - 2026-10-30
 
 - A shorter README: what offcard does, how to install it, and how to use it.
