@@ -5,6 +5,11 @@ when a new version is out.
 
 offcard was called **ShotLoft** up to v0.9.1, and **Sony Import** up to v0.4.0.
 
+## [0.13.1] - 2026-11-06
+
+- Installing or updating no longer stalls for up to a minute or more when one of GitHub's file
+  server addresses isn't responding: the install line moves on to a working one in seconds.
+
 ## [0.13.0] - 2026-11-06
 
 - **offcard on Windows is now the same panel as on a Mac.** It lives in the tray by the clock, opens
