@@ -78,7 +78,7 @@ def main():
         url = "file:" + urllib.request.pathname2url(release)
         root = unpack(archive, os.path.join(tmp, "installed"))
         version = subprocess.run([engine_of(root), "--version"], capture_output=True, text=True, timeout=120).stdout.split()[-1]
-        mark = os.path.join(root, "Contents", "old-version") if IS_MAC else os.path.join(root, "old-version")
+        mark = os.path.join(root, "Contents", "old-version") if IS_MAC else os.path.join(root, "engine", "old-version")
         open(mark, "w").close()
 
         # A download that doesn't match its checksum changes nothing, and says so.
