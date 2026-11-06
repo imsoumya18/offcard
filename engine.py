@@ -31,7 +31,7 @@ import sys
 import time
 from datetime import datetime
 
-__version__ = "0.13.1"
+__version__ = "0.13.2"
 IS_WIN = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
 TRASH = "Recycle Bin" if IS_WIN else "Trash"

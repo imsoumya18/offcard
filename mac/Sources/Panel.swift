@@ -569,6 +569,7 @@ struct PanelView: View {
                 v.info = [line("Nothing new since your last backup"),
                           noteLine ?? line("\(counts(card.photos.int, card.videos.int).capitalizedFirst), all on \(drive)")]
                 v.slot = .inkPair("Check Before Formatting", verify, "Eject", eject)
+                return v
             }
             let c = model.choice, partial = !c.everything && !c.files.isEmpty
             let needed = partial ? c.bytes() : r.needed_bytes.double

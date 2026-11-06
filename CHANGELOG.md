@@ -5,6 +5,11 @@ when a new version is out.
 
 offcard was called **ShotLoft** up to v0.9.1, and **Sony Import** up to v0.4.0.
 
+## [0.13.2] - 2026-11-06
+
+- On a Mac, a fully backed-up card now shows **All backed up** with Check Before Formatting and Eject,
+  instead of a clickable **Back Up 0 Photos**.
+
 ## [0.13.1] - 2026-11-06
 
 - Installing or updating no longer stalls for up to a minute or more when one of GitHub's file
