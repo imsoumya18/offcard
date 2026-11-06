@@ -65,6 +65,7 @@ final class AppModel: ObservableObject {
     private var lastBackup = ""
     private var iconState = ""
     private var watch: AnyCancellable?
+    private var applyingUpdate = false
 
     private init() {
         watch = engine.$state.sink { [weak self] s in self?.update(s) }
@@ -82,6 +83,12 @@ final class AppModel: ObservableObject {
 
     private func update(_ s: J) {
         guard s.exists else { return }
+        if s.update_job.state.str == "ready", !engine.running, !applyingUpdate {
+            applyingUpdate = true     // the new version is checked and waiting: swap it in and quit
+            Task {
+                if (try? await engine.call("/api/update/apply", [:])) != nil { NSApp.terminate(nil) } else { applyingUpdate = false }
+            }
+        }
         let job = s.job, k = key(s)
         let cardsIn = !s.cards.array.isEmpty
         let planned = job.kind.str == "plan" && job.state.str == "done" && s.plan_for.json == k

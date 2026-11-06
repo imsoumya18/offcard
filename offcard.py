@@ -26,7 +26,7 @@ import webbrowser
 
 # The engine (engine.py) and HDR merge (hdr.py) are loaded at run time, so the app bundler can't
 # see what they import. Importing those modules here makes sure they are packed into the built app.
-import argparse, base64, ctypes, datetime, getpass, hashlib, io, re, string, struct, urllib.request, zlib  # noqa: E401,F401
+import argparse, base64, ctypes, datetime, getpass, hashlib, io, platform, re, string, struct, urllib.request, zipfile, zlib  # noqa: E401,F401
 try:
     import numpy, rawpy, PIL.Image, PIL.ImageFilter, PIL.TiffImagePlugin  # noqa: E401,F401
 except ImportError:
@@ -75,6 +75,7 @@ class App:
         self.report = None       # last run_import() result, used by "trash"
         self.last_seen = time.time()
         self.update = E.UpdateCheck()
+        self.update_job = None   # downloading a newer version: {"state", "version", "progress", "error", "new"}
         self.cards_override = [c for c in os.environ.get("OFFCARD_TEST_CARDS", "").split(os.pathsep) if c]
 
     def cards(self):
@@ -248,7 +249,7 @@ def api_state(_):
     APP.last_seen = time.time()
     info = E.detect(APP.dest)
     cards = APP.cards()
-    newer = APP.update.newer()
+    newer = os.environ.get("OFFCARD_TEST_UPDATE_VERSION") or APP.update.newer()
     return {
         "version": E.__version__, "trash_name": E.TRASH, "file_manager": E.FILE_MANAGER,
         "cards": [card_summary(c) for c in cards],
@@ -261,9 +262,46 @@ def api_state(_):
         "hdr_folder_exists": bool(APP.hdr_folder and os.path.isdir(APP.hdr_folder)),
         "hdr_new": None if APP.hdr_sets is None else sum(not st["done"] for st in APP.hdr_sets), "update": {"latest": newer, "line": E.INSTALL_LINE_WIN if E.IS_WIN else E.INSTALL_LINE}
                                   if newer else None,
+        "can_update": E.install_root() is not None, "update_job": update_job_brief(),
         "can_pick": True, "plan_for": APP.plan_key, "recent_dests": recent_dests(),
         "recent_tags": E.load_config().get("recent_tags", []),
     }
+
+
+def update_job_brief():
+    j = APP.update_job
+    return j and {k: j[k] for k in ("state", "version", "progress", "error")}
+
+
+def api_update(_):
+    """Download the newer version and get it ready. The app asks for it to be applied when it's idle."""
+    version = os.environ.get("OFFCARD_TEST_UPDATE_VERSION") or APP.update.newer()
+    if not version:
+        raise RuntimeError("offcard is up to date.")
+    with APP.lock:
+        if APP.update_job and APP.update_job["state"] in ("running", "ready"):
+            return {"started": False}
+        job = APP.update_job = {"state": "running", "version": version, "progress": None, "error": None, "new": None}
+
+    def run():
+        try:
+            job["new"] = E.download_update(version, lambda d, t: job.update(progress={"done": d, "total": t}))
+            job["state"] = "ready"
+        except Exception as e:
+            job["error"], job["state"] = str(e), "error"
+    threading.Thread(target=run, daemon=True).start()
+    return {"started": True}
+
+
+def api_update_apply(_):
+    job = APP.update_job
+    if not job or job["state"] != "ready":
+        raise RuntimeError("The update isn't ready.")
+    if (APP.job and APP.job["state"] == "running") or (APP.hdr_job and APP.hdr_job["state"] == "running"):
+        raise RuntimeError("offcard updates when this finishes.")
+    E.apply_update(job["new"], int(os.environ.get("OFFCARD_PARENT_PID") or os.getppid()))
+    job["state"] = "applying"
+    return {"applying": True}
 
 
 def api_set_dest(body):
@@ -643,7 +681,8 @@ ROUTES = {"/api/state": api_state, "/api/dest": api_set_dest, "/api/pick": api_p
           "/api/trash": api_trash, "/api/reset": api_reset, "/api/hdr/folder": api_hdr_folder,
           "/api/hdr/pick": api_hdr_pick, "/api/hdr/scan": api_hdr_scan, "/api/hdr/merge": api_hdr_merge,
           "/api/hdr/sets": api_hdr_sets, "/api/reveal": api_reveal, "/api/tag": api_tag,
-          "/api/plan/items": api_plan_items, "/api/plan/thumbs": api_plan_thumbs}
+          "/api/plan/items": api_plan_items, "/api/plan/thumbs": api_plan_thumbs,
+          "/api/update": api_update, "/api/update/apply": api_update_apply}
 
 
 class Handler(http.server.BaseHTTPRequestHandler):

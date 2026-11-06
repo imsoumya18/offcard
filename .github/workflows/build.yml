@@ -115,6 +115,11 @@ jobs:
             Linux)   (cd dist && zip -q "../out/${{ matrix.asset }}" offcard) ;;  # zip keeps the executable bit
           esac
 
+      - name: Test updating from inside the app
+        if: runner.os != 'Linux'
+        shell: bash
+        run: python tests/update_test.py "out/${{ matrix.asset }}"
+
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset }}
@@ -213,4 +218,6 @@ jobs:
             echo "::warning::CHANGELOG.md has no section for $GITHUB_REF_NAME; using GitHub's automatic notes"
             NOTES=(--generate-notes)
           fi
+          # The app checks its in-app updates against this list.
+          (cd out && sha256sum offcard-* > SHA256SUMS)
           gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" "${NOTES[@]}"

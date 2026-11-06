@@ -87,6 +87,12 @@ OFFCARD_DEV=1 ...                                 # skip the login item set-up (
 - **Window.** Running `offcard.py` from source opens the page in a native window
   ([pywebview](https://pywebview.flowrl.com/)) on Windows and Mac. On Linux, or if that window can't
   start, it opens in the default browser and quits about 45 seconds after the page is closed.
+- **Updating from inside the app.** On Mac and Windows, `/api/update` downloads the release beside the
+  app, checks it against the release's `SHA256SUMS`, and checks the new version runs (`--version`,
+  `--check`). When nothing is running, the panel calls `/api/update/apply`, which leaves a small script
+  behind, and quits. The script waits for the app and engine to go, swaps the new version in, puts the
+  old one back if that fails, and starts it. If the app can't update itself, or it fails, the panel
+  offers the install line. `tests/update_test.py` runs this on each build. Linux keeps the install line.
 - **Backup location.** Any folder but one on a memory card (`build_plan` and `/api/dest` both refuse that).
   `location_kind` says whether it's on this computer, a drive or the network, and the choice is kept in
   the config as `dest_kind`, so a network location that drops off still reads as one. The panels pick

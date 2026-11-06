@@ -128,7 +128,12 @@ const chosenBytes = ids => choice.files.filter(f => (ids || picked()).has(f.id))
 const totalFiles = () => choice.files.reduce((n, f) => n + fileCount(f), 0);
 
 // ---- what the app does on its own as the engine's state changes
+let applyingUpdate = false;
 function update() {
+  if (s.update_job?.state === "ready" && !running() && !applyingUpdate) {
+    applyingUpdate = true;      // the new version is checked and waiting: swap it in and quit
+    api("/api/update/apply", {}).then(() => call("quit")).catch(() => { applyingUpdate = false; });
+  }
   const j = job(), cards = (s.cards || []).map(c => c.path).sort();
   const k = JSON.stringify([cards, s.dest ?? null]);
   const planned = j.kind === "plan" && j.state === "done" && JSON.stringify(s.plan_for) === k;
@@ -294,7 +299,7 @@ async function loadThumbs(ids) {
 
 // ---- pieces of the panel
 const line = (t, bad) => `<div class="${bad ? "bad" : ""}">${esc(t)}</div>`;
-const noteLine = () => note ? line(note.text, note.bad) : null;
+const noteLine = () => s.update_job?.state === "error" ? line(`Couldn't update: ${s.update_job.error}`, true) : note ? line(note.text, note.bad) : null;
 const on = (name, ...args) => `data-do="${name}" data-args="${esc(JSON.stringify(args))}"`;
 const ink = (t, name, ...a) => `<button class="pill ink" ${on(name, ...a)}>${esc(t)}</button>`;
 const quiet = (t, name, ...a) => `<button class="pill quiet" ${on(name, ...a)}>${esc(t)}</button>`;
@@ -489,13 +494,23 @@ function hdrDetail() {
   if (j?.state === "running") return j.kind === "merge" ? "Merging…" : "";
   return s.hdr_new > 0 ? plural(s.hdr_new, "new set") : "";
 }
+/** A newer version: one click downloads and installs it. The install line stays for when it can't. */
+function updateRow() {
+  const u = s.update_job, st = u?.state, latest = esc(s.update.latest);
+  const row = (act, title, detail) => `<button class="mrow" ${act ? on(act) : ""}><span class="gl ink">${I.arrow}</span><span class="t">${title}</span><span class="d">${esc(detail)}</span></button><div class="rule tight"></div>`;
+  if (st === "running" || st === "ready" || st === "applying") {
+    const p = u.progress;
+    return row(null, `Updating to ${latest}`, st === "running" ? (p?.total ? `${Math.floor(p.done * 100 / p.total)}%` : "Starting…") : running() ? "After this finishes" : "Restarting…");
+  }
+  return s.can_update && st !== "error" ? row("startUpdate", `Update to ${latest}`, "Update") : row("copyUpdate", `Update to ${latest}`, "Copy Install Line");
+}
 function backupPage() {
   const v = panelState();
   const place_ = s.dest ? (place(s.dest).folder || "Whole drive") : "";
   const dest = v.driveLine !== null
     ? `<div class="small ${v.driveBad ? "bad" : ""}">${esc(v.driveLine)}</div>`
     : `<div class="small"><button class="dest" ${on("destMenu")} ${job().state === "running" ? "disabled" : ""} title="Choose where this backup goes"><span>${esc(place_)}</span>${I.updown}</button></div>`;
-  const update = s.update ? `<button class="mrow" ${on("copyUpdate")}><span class="gl ink">${I.arrow}</span><span class="t">Update to ${esc(s.update.latest)}</span><span class="d">Copy Install Line</span></button><div class="rule tight"></div>` : "";
+  const update = s.update ? updateRow() : "";
   return `<div class="flow">
       <div class="tile ${v.cardDim ? "dim" : ""}">${v.card}<div class="name">${esc(v.cardTitle)}</div><div class="small ${v.cardBad ? "bad" : ""}">${esc(v.cardLine)}</div></div>
       <div class="chev ${v.copying ? "run" : ""}">${I.chev}</div>
@@ -633,6 +648,7 @@ const DO = {
   backUp, verify, eject, retry, pickBackup, moveExtras, copyUpdate, hdrMerge, hdrChoose, hdrRetry,
   beginTag, push, pop,
   pushDays: () => push("days"),
+  startUpdate() { note = null; act("/api/update").then(say); },
   commitTag: (d, t) => setTag(d, t),
   toggleLogin: () => setLogin(!loginOn),
   quit: () => call("quit"),

@@ -22,6 +22,7 @@ import getpass
 import hashlib
 import json
 import os
+import platform
 import re
 import shutil
 import string
@@ -29,9 +30,10 @@ import struct
 import subprocess
 import sys
 import time
+import zipfile
 from datetime import datetime
 
-__version__ = "0.13.3"
+__version__ = "0.14.0"
 IS_WIN = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
 TRASH = "Recycle Bin" if IS_WIN else "Trash"
@@ -1324,6 +1326,186 @@ class UpdateCheck:
         if self.thread:
             self.thread.join(timeout=0.5)  # by the end of a run it has long finished
         return self.latest if self.latest and _vtuple(self.latest) > _vtuple(__version__) else None
+
+
+# ---------------------------------------------------------------- updating from inside the app
+
+RELEASES = os.environ.get("OFFCARD_RELEASES") or "https://github.com/imsoumya18/offcard/releases/download/v{version}"
+
+
+def update_asset():
+    """This system's download in a release, or None where the app can't replace itself."""
+    if IS_WIN:
+        return "offcard-windows.zip"
+    if IS_MAC:
+        return "offcard-macos-apple-silicon.zip" if platform.machine() == "arm64" else "offcard-macos-intel.zip"
+    return None
+
+
+def install_root():
+    """The installed app this engine belongs to: offcard.app, or the folder with offcard.exe. None
+    when running from source, or on Linux."""
+    root = os.environ.get("OFFCARD_APP_PATH")
+    if not root and getattr(sys, "frozen", False):
+        exe = os.path.realpath(sys.executable)
+        if IS_MAC:
+            root = os.path.abspath(os.path.join(exe, "..", "..", "..", ".."))
+        elif IS_WIN:
+            root = os.path.dirname(os.path.dirname(exe))
+    if not root or not update_asset():
+        return None
+    return root if os.path.exists(os.path.join(root, "offcard.exe") if IS_WIN else os.path.join(root, "Contents")) else None
+
+
+def _fetch(url, out, progress=None):
+    """Download url to out. Falls back to curl, because some Python builds can't find the system's
+    certificates."""
+    import urllib.request
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": f"offcard/{__version__}"})
+        with urllib.request.urlopen(req, timeout=10) as resp, open(out, "wb") as f:
+            total, done = int(resp.headers.get("Content-Length") or 0), 0
+            while True:
+                buf = resp.read(1024 * 1024)
+                if not buf:
+                    return
+                f.write(buf)
+                done += len(buf)
+                if progress:
+                    progress(done, total)
+    except Exception:
+        if not url.startswith("https://") or not shutil.which("curl"):
+            raise
+    head = subprocess.run(["curl", "-sIL", "--connect-timeout", "10", url], capture_output=True, text=True, timeout=60).stdout
+    sizes = re.findall(r"(?im)^content-length:\s*(\d+)", head)
+    total = int(sizes[-1]) if sizes else 0
+    p = subprocess.Popen(["curl", "-fsSL", "--connect-timeout", "10", "--retry", "2", url, "-o", out],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **_no_window())
+    while p.poll() is None:
+        time.sleep(0.2)
+        if progress and os.path.exists(out):
+            progress(os.path.getsize(out), total)
+    if p.returncode:
+        raise IOError("the download didn't finish")
+
+
+def _no_window():
+    return {"creationflags": 0x08000000} if IS_WIN else {}   # CREATE_NO_WINDOW
+
+
+def download_update(version, progress=None):
+    """Download a release beside the app, check it's whole and works, and return where it's staged.
+    Nothing of the installed app changes here."""
+    root, asset = install_root(), update_asset()
+    if not root:
+        raise RuntimeError("This copy of offcard can't update itself.")
+    parent = root if IS_WIN else os.path.dirname(root)
+    if not os.access(parent, os.W_OK):
+        raise RuntimeError(f"offcard can't write to {parent}.")
+    stage = os.path.join(parent, ".offcard-update")
+    shutil.rmtree(stage, ignore_errors=True)
+    os.makedirs(stage)
+    try:
+        base = RELEASES.format(version=version)
+        sums = os.path.join(stage, "SHA256SUMS")
+        _fetch(f"{base}/SHA256SUMS", sums)
+        with open(sums) as f:
+            want = next((line.split()[0] for line in f if line.split()[-1].lstrip("*") == asset), None)
+        if not want:
+            raise IOError("the release doesn't list a checksum for this download")
+        archive = os.path.join(stage, asset)
+        _fetch(f"{base}/{asset}", archive, progress)
+        h = hashlib.sha256()
+        with open(archive, "rb") as f:
+            for buf in iter(lambda: f.read(1024 * 1024), b""):
+                h.update(buf)
+        if h.hexdigest() != want.lower():
+            raise IOError("the download doesn't match its checksum")
+        new = os.path.join(stage, "new")
+        if IS_MAC:   # ditto keeps the app's permissions and links, which zipfile doesn't
+            subprocess.run(["ditto", "-x", "-k", archive, new], check=True, capture_output=True, timeout=300)
+            app = os.path.join(new, "offcard.app")
+            subprocess.run(["xattr", "-cr", app], capture_output=True, timeout=60)
+            engine, check = os.path.join(app, "Contents", "Resources", "engine", "OffcardEngine"), os.path.join(app, "Contents", "MacOS", "offcard")
+        else:
+            with zipfile.ZipFile(archive) as z:
+                z.extractall(new)
+            app = new
+            engine, check = os.path.join(new, "engine", "OffcardEngine.exe"), os.path.join(new, "offcard.exe")
+        os.remove(archive)
+        env = {**os.environ, "OFFCARD_NO_UPDATE_CHECK": "1"}
+        for name in ("OFFCARD_URL_FILE", "OFFCARD_TEST_CARDS", "OFFCARD_PARENT_PID"):
+            env.pop(name, None)
+        out = subprocess.run([engine, "--version"], capture_output=True, text=True, timeout=120, env=env, **_no_window()).stdout
+        if version not in out:
+            raise IOError(f"the download says it's {out.strip() or 'nothing'}, not {version}")
+        if subprocess.run([check, "--check"], capture_output=True, timeout=180, env=env, **_no_window()).returncode:
+            raise IOError("the new version didn't start")
+        return app
+    except Exception:
+        shutil.rmtree(stage, ignore_errors=True)
+        raise
+
+
+def apply_update(new, app_pid):
+    """Leave behind a small script that waits for the app and this engine to quit, swaps the new
+    version in (putting the old one back if that fails), and starts it. The caller then quits."""
+    root = install_root()
+    stage = os.path.dirname(os.path.dirname(new)) if IS_MAC else os.path.dirname(new)
+    relaunch = not os.environ.get("OFFCARD_NO_RELAUNCH")
+    if IS_WIN:
+        q = lambda s: "'" + s.replace("'", "''") + "'"
+        script = os.path.join(stage, "swap.ps1")
+        body = f"""$ErrorActionPreference = 'Stop'
+foreach ($id in {app_pid}, {os.getpid()}) {{ Wait-Process -Id $id -Timeout 60 -ErrorAction SilentlyContinue }}
+$root = {q(root)}; $new = {q(new)}; $stage = {q(stage)}
+$exe = Join-Path $root 'offcard.exe'; $engine = Join-Path $root 'engine'
+foreach ($try in 1..30) {{
+    try {{
+        Rename-Item $exe 'offcard.exe.old'
+        try {{ Rename-Item $engine 'engine.old' }} catch {{ Rename-Item "$exe.old" 'offcard.exe'; throw }}
+        break
+    }} catch {{ if ($try -eq 30) {{ exit 1 }}; Start-Sleep -Milliseconds 500 }}
+}}
+try {{
+    Move-Item (Join-Path $new 'offcard.exe') $exe
+    Move-Item (Join-Path $new 'engine') $engine
+    Remove-Item -Force "$exe.old"; Remove-Item -Recurse -Force "$engine.old"
+}} catch {{
+    if (Test-Path "$exe.old") {{ Remove-Item -Force $exe -ErrorAction SilentlyContinue; Rename-Item "$exe.old" 'offcard.exe' }}
+    if (Test-Path "$engine.old") {{ Remove-Item -Recurse -Force $engine -ErrorAction SilentlyContinue; Rename-Item "$engine.old" 'engine' }}
+}}
+{"Start-Process $exe" if relaunch else ""}
+Set-Location $env:TEMP
+Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
+"""
+        with open(script, "w", encoding="utf-8") as f:
+            f.write(body)
+        subprocess.Popen(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script],
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         creationflags=0x08000000 | 0x00000200, close_fds=True)  # no window, its own group
+        return
+    import shlex
+    q = shlex.quote
+    script = os.path.join(stage, "swap.sh")
+    old = root + ".old"
+    with open(script, "w") as f:
+        f.write(f"""#!/bin/sh
+tries=0
+while kill -0 {app_pid} 2>/dev/null || kill -0 {os.getpid()} 2>/dev/null; do
+  tries=$((tries + 1)); [ "$tries" -gt 300 ] && break
+  sleep 0.2
+done
+cd /
+rm -rf {q(old)}
+if mv {q(root)} {q(old)}; then
+  if mv {q(new)} {q(root)}; then rm -rf {q(old)}; else mv {q(old)} {q(root)}; fi
+fi
+{("open " + q(root)) if relaunch else ":"}
+rm -rf {q(stage)}
+""")
+    subprocess.Popen(["/bin/sh", script], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL, start_new_session=True, close_fds=True)
 
 
 def print_update(latest):

@@ -36,7 +36,7 @@ curl -fsSL https://raw.githubusercontent.com/imsoumya18/offcard/main/install.sh 
 irm https://raw.githubusercontent.com/imsoumya18/offcard/main/install.ps1 | iex
 ```
 
-Run it again to update. Or [download](https://github.com/imsoumya18/offcard/releases/latest) it.
+To update, click **Update** in offcard when it offers one, or run this again. Or [download](https://github.com/imsoumya18/offcard/releases/latest) it.
 
 ## How to use
 

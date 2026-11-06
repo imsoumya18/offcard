@@ -5,6 +5,13 @@ when a new version is out.
 
 offcard was called **ShotLoft** up to v0.9.1, and **Sony Import** up to v0.4.0.
 
+## [0.14.0] - 2026-11-06
+
+- **Update in one click.** On Mac and Windows, **Update to x.y.z** in the panel now downloads the new
+  version, checks it, and restarts offcard on it, with your settings kept. It waits if a backup, a check
+  or a merge is running. If it can't finish, your current version keeps working and the install line is
+  still there. This works from this version onward, so getting here still takes the install line.
+
 ## [0.13.3] - 2026-11-06
 
 - **Back up to any folder, shown for what it is.** The panel shows a computer for this Mac or PC, a drive

@@ -455,11 +455,7 @@ struct PanelView: View {
 
             Hairline()
             if let latest = s.update.latest.string {
-                MenuRow(symbol: "arrow.down", title: "Update to \(latest)", detail: "Copy Install Line", active: true) {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(s.update.line.str, forType: .string)
-                    note = ("Install line copied. Paste it into Terminal.", false)
-                }
+                updateRow(latest)
                 Hairline()
             }
             MenuRow(symbol: "camera.filters", title: "HDR Merge", detail: hdrDetail) { openHDR() }
@@ -630,6 +626,29 @@ struct PanelView: View {
         return v
     }
 
+    /// A newer version: one click downloads and installs it, and offcard comes back on it. If this
+    /// copy can't update itself, or that failed, the install line is still there.
+    @ViewBuilder func updateRow(_ latest: String) -> some View {
+        let job = s.update_job, st = job.state.str
+        if st == "running" || st == "ready" || st == "applying" {
+            let p = job.progress
+            let detail = st == "running" ? (p.total.double > 0 ? "\(Int(p.done.double * 100 / p.total.double))%" : "Starting…")
+                : engine.running ? "After this finishes" : "Restarting…"
+            MenuRow(symbol: "arrow.down", title: "Updating to \(latest)", detail: detail, active: true) {}
+        } else if s.can_update.bool && st != "error" {
+            MenuRow(symbol: "arrow.down", title: "Update to \(latest)", detail: "Update", active: true) {
+                note = nil
+                Task { await say(engine.act("/api/update")) }
+            }
+        } else {
+            MenuRow(symbol: "arrow.down", title: "Update to \(latest)", detail: "Copy Install Line", active: true) {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(s.update.line.str, forType: .string)
+                note = ("Install line copied. Paste it into Terminal.", false)
+            }
+        }
+    }
+
     /// Ready to back up: the day's folder, named for its tag, with "+ Add tag" (typed in place); or,
     /// for a card with several days, how many and "Add tags ›", which opens each day on its own.
     @ViewBuilder var readyInfo: some View {
@@ -733,7 +752,10 @@ struct PanelView: View {
         Text(s).font(.system(size: 11)).foregroundStyle(bad ? AnyShapeStyle(Color.red) : AnyShapeStyle(.secondary))
     }
 
-    var noteLine: Text? { note.map { line($0.text, bad: $0.bad) } }
+    var noteLine: Text? {
+        if s.update_job.state.str == "error" { return line("Couldn't update: \(s.update_job.error.str)", bad: true) }
+        return note.map { line($0.text, bad: $0.bad) }
+    }
 
     /// Where a backup goes, in two lines: the first day's folder (the new part marked), then what goes in.
     func destinationLines(fallback: String) -> [Text] {
