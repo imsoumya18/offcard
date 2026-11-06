@@ -312,6 +312,7 @@ It runs as `irm …/install.ps1 | iex`, in Windows PowerShell 5.1 or later:
 - It adds Microsoft's Edge WebView2 if the PC doesn't have it. Windows 11 always does; a few
   Windows 10 PCs don't.
 - `Unblock-File` makes sure the app carries no "from the internet" mark.
+- A download that can't connect within 20 seconds is tried again, up to three times in all, because one of GitHub's file server addresses can be dead. `install.sh` does the same with `curl --connect-timeout 10 --retry 2`.
 - It runs inside `& { … }` and never calls `exit`, so a failure can't close the user's PowerShell
   window.
 

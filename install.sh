@@ -35,13 +35,13 @@ download() {  # label, file, then one or more release file names to try in order
   for name in "$@"; do
     url="$RELEASES/$name"
     if [ ! -t 2 ]; then                                    # scripts, CI: no animation
-      curl -fsSL --retry 2 "$url" -o "$out" 2>/dev/null && return 0
+      curl -fsSL --connect-timeout 10 --retry 2 "$url" -o "$out" 2>/dev/null && return 0
       continue
     fi
     # One request: curl writes the response headers to $hdr as they arrive, so the size is known
     # as soon as GitHub answers, with no extra round trips on slow connections.
     hdr="$tmp/headers"; : > "$hdr"; : > "$out"
-    curl -fsSL --retry 2 -D "$hdr" "$url" -o "$out" 2>/dev/null & pid=$!
+    curl -fsSL --connect-timeout 10 --retry 2 -D "$hdr" "$url" -o "$out" 2>/dev/null & pid=$!
     start=$SECONDS; size=0
     while kill -0 "$pid" 2>/dev/null; do
       [ "$size" -gt 0 ] || size="$(tr -d '\r' < "$hdr" | awk 'tolower($1)=="content-length:" {n=$2} END {print n+0}')"
@@ -160,7 +160,7 @@ case "$(uname -s)" in
 
     apps_dir="${XDG_DATA_HOME:-$HOME/.local/share}"
     mkdir -p "$apps_dir/applications" "$apps_dir/icons"
-    curl -fsSL "$RAW/docs/icon.png" -o "$apps_dir/icons/offcard.png" 2>/dev/null || true  # icon is optional
+    curl -fsSL --connect-timeout 10 "$RAW/docs/icon.png" -o "$apps_dir/icons/offcard.png" 2>/dev/null || true  # icon is optional
     # The app opens in your browser on Linux; no terminal window needed.
     cat > "$apps_dir/applications/offcard.desktop" <<DESKTOP
 [Desktop Entry]

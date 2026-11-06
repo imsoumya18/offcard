@@ -26,7 +26,18 @@
     function Get-File($url, $out) {
         # Show something at once: GitHub can take a while to answer on slow connections.
         Write-Progress -Activity 'Downloading offcard' -Status 'Connecting to GitHub...' -PercentComplete 0
-        $resp = [System.Net.WebRequest]::Create($url).GetResponse()
+        # A dead server address can hold a connection for a long time, and the next try may get a good one.
+        $resp = $null
+        foreach ($try in 1..3) {
+            try {
+                $req = [System.Net.WebRequest]::Create($url)
+                $req.Timeout = 20000
+                $resp = $req.GetResponse()
+                break
+            } catch {
+                if ($try -eq 3) { throw }
+            }
+        }
         $total = $resp.ContentLength
         $in = $resp.GetResponseStream(); $fs = [System.IO.File]::Create($out)
         $buf = New-Object byte[] 1MB; $done = 0; $last = -1
