@@ -31,7 +31,7 @@ import sys
 import time
 from datetime import datetime
 
-__version__ = "0.13.2"
+__version__ = "0.13.3"
 IS_WIN = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
 TRASH = "Recycle Bin" if IS_WIN else "Trash"
@@ -426,6 +426,49 @@ def drive_of(path):
     return None
 
 
+NETWORK_FS = {"smbfs", "nfs", "nfs4", "afpfs", "webdav", "cifs", "smb3", "smb2", "sshfs", "fuse.sshfs", "davfs", "fuse.davfs2"}
+
+
+def _mounted_network(mounts, path):
+    """From lines of `mount` (macOS) or /proc/mounts (Linux): is path on a network file system?"""
+    best, network = "", False
+    for line in mounts:
+        m = re.match(r".+ on (/.*) \(([\w.]+)", line)          # macOS: "//me@nas/x on /Volumes/x (smbfs, ...)"
+        parts = line.split()
+        if m:
+            where, fs = m.group(1), m.group(2)
+        elif len(parts) >= 3:                                    # Linux: "nas:/x /mnt/x nfs4 rw 0 0"
+            where, fs = parts[1].replace("\\040", " "), parts[2]
+        else:
+            continue
+        inside = path == where or path.startswith(where.rstrip("/") + "/")
+        if inside and len(where) > len(best):
+            best, network = where, fs in NETWORK_FS
+    return network
+
+
+def location_kind(path):
+    """Where a backup folder is: "internal" (this computer), "external" (a drive) or "network"."""
+    path = os.path.abspath(path)
+    drive = drive_of(path)
+    try:
+        if IS_WIN:
+            import ctypes
+            if drive and (drive.startswith("\\\\") or ctypes.windll.kernel32.GetDriveTypeW(drive) == 4):  # DRIVE_REMOTE
+                return "network"
+        elif IS_MAC:
+            lines = subprocess.run(["mount"], capture_output=True, text=True, timeout=5).stdout.splitlines()
+            if _mounted_network(lines, path):
+                return "network"
+        else:
+            with open("/proc/mounts") as f:
+                if _mounted_network(f.read().splitlines(), path):
+                    return "network"
+    except Exception:
+        pass
+    return "external" if drive else "internal"
+
+
 def volume_label(root):
     """A Windows drive's name ("Untitled" for E:\\), or None: elsewhere a volume's folder has its name."""
     if not IS_WIN or not root:
@@ -697,6 +740,8 @@ def free_bytes(path):
 
 
 def build_plan(dest, cards):
+    if card_root(dest):
+        raise RuntimeError("That folder is on a memory card, and offcard never writes to a card.")
     index = DestIndex(dest)
     new, fills, seen_keys, per_card = [], [], set(), {}
     listed = [(card, scan_card(card)) for card in cards]

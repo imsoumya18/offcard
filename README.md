@@ -16,7 +16,7 @@
 
 ## What it does
 
-- **Backs up only what's new** from the card to your drive, into `Year / Month / Day` folders.
+- **Backs up only what's new** from the card to any folder or drive, into `Year / Month / Day` folders.
 - **Checks every byte** before you format the card.
 - **Merges bracketed RAW shots** into one HDR photo.
 

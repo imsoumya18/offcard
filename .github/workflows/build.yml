@@ -26,7 +26,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Test the engine
-        run: python tests/smoke_test.py python engine.py
+        run: |
+          python tests/smoke_test.py python engine.py
+          python tests/location_test.py
 
   app:
     # The desktop app on top of the engine: SwiftUI on a Mac, a Tauri tray app on Windows, the page

@@ -5,6 +5,14 @@ when a new version is out.
 
 offcard was called **ShotLoft** up to v0.9.1, and **Sony Import** up to v0.4.0.
 
+## [0.13.3] - 2026-11-06
+
+- **Back up to any folder, shown for what it is.** The panel shows a computer for this Mac or PC, a drive
+  for an external drive, and a globe for a network location, which asks you to connect instead of plug in.
+- **offcard no longer lets you pick a folder on a memory card as the backup location.** The card is only
+  ever read.
+- The launch video shows real names and how the files end up organised, in Finder and File Explorer.
+
 ## [0.13.2] - 2026-11-06
 
 - On a Mac, a fully backed-up card now shows **All backed up** with Check Before Formatting and Eject,

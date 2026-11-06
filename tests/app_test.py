@@ -64,7 +64,10 @@ def main():
 
             st, s = call("/api/state")
             assert st == 200 and s["cards"] and s["cards"][0]["photos"] == 5 and s["dest"] is None, s
+            st, r = call("/api/dest", {"path": os.path.join(card, "backup")})
+            assert st == 400 and "memory card" in r["error"], "a folder on the card was accepted as the backup folder"
             assert call("/api/dest", {"path": dest})[0] == 200
+            assert call("/api/state")[1]["dest_kind"] in ("internal", "external")
             call("/api/plan", {})
             plan = wait("plan")
             assert plan["new_photos"] == 5 and plan["new_videos"] == 1 and plan["enough_space"], plan

@@ -254,6 +254,7 @@ def api_state(_):
         "cards": [card_summary(c) for c in cards],
         "dest": APP.dest, "dest_drive": info["dest_drive"],
         "dest_label": E.volume_label(info["dest_drive"]) if info["dest_drive"] else None,
+        "dest_kind": dest_kind(),
         "dest_drive_connected": info["dest_drive_connected"], "dest_exists": info["dest_exists"],
         "free_bytes": E.free_bytes(APP.dest) if APP.dest and info["dest_drive_connected"] else None,
         "job": APP.job, "hdr_job": hdr_job_brief(), "hdr_missing": HDR_MISSING, "hdr_folder": APP.hdr_folder,
@@ -271,11 +272,25 @@ def api_set_dest(body):
         raise RuntimeError("Choose a folder first.")
     if os.path.exists(path) and not os.path.isdir(path):
         raise RuntimeError("That's a file, not a folder.")
+    if E.card_root(path):
+        raise RuntimeError("That folder is on a memory card, and offcard never writes to a card. "
+                           "Choose a folder on this computer or on a drive.")
     APP.dest, APP.plan = path, None
     cfg = E.load_config()
     recent = [path] + [p for p in cfg.get("recent_dests", []) if p != path]
-    E.save_config({**cfg, "dest": path, "recent_dests": recent[:5]})
+    E.save_config({**cfg, "dest": path, "dest_kind": E.location_kind(path), "recent_dests": recent[:5]})
     return {"dest": path}
+
+
+def dest_kind():
+    """Remembered when the folder is chosen, so a network location that drops off still reads as one."""
+    if not APP.dest:
+        return None
+    cfg = E.load_config()
+    if not cfg.get("dest_kind"):        # chosen before offcard kept this
+        cfg["dest_kind"] = E.location_kind(APP.dest)
+        E.save_config(cfg)
+    return cfg["dest_kind"]
 
 
 def recent_dests():

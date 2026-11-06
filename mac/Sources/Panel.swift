@@ -509,6 +509,7 @@ struct PanelView: View {
             v.drive = .quiet("folder.badge.plus"); v.driveTitle = "Choose"; v.driveLine = "a backup folder"
         } else {
             v.driveTitle = drive
+            v.drive = .quiet(System.locationSymbol(s.dest_kind.str))
             if !s.dest_drive_connected.bool { v.drive = .alert("exclamationmark"); v.driveLine = "Not connected"; v.driveBad = true }
         }
 
@@ -533,7 +534,8 @@ struct PanelView: View {
             return v
         }
         if !s.dest_drive_connected.bool {
-            v.info = [line("Plug in \(drive) to back up", bad: true), line("or choose another folder")]
+            v.info = [line(s.dest_kind.str == "network" ? "Connect to \(drive) to back up" : "Plug in \(drive) to back up", bad: true),
+                      line("or choose another folder")]
             v.slot = .quiet("Choose Another Folder…", pickBackup)
             return v
         }

@@ -48,6 +48,9 @@ function dayRange(keys) {
 /** The drive, and the folder on it (null when the folder is the drive itself). */
 function place(path) {
   const parts = pieces(path);
+  if (String(path).startsWith("\\\\")) {          // a network share: \\nas\Photo\Sony Backup
+    return { drive: parts[1] || parts[0], folder: parts.length > 2 ? parts[parts.length - 1] : null };
+  }
   if (/^[A-Za-z]:$/.test(parts[0] || "")) {
     const letter = parts[0].toUpperCase();
     const same = s.dest && pieces(s.dest)[0]?.toUpperCase() === letter;
@@ -68,6 +71,8 @@ const I = {
   cardOut: svg(16, 18, `<path d="M3 1.5h7L14 5.5V15a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 15V3A1.5 1.5 0 0 1 3 1.5Z" stroke="currentColor" stroke-width="1.4"/>`),
   drive: svg(20, 14, `<rect x="1" y="1.5" width="18" height="11" rx="2.5" stroke="currentColor" stroke-width="1.5"/><circle cx="15" cy="7" r="1.1" fill="currentColor"/>${stroke("M4.5 7h5")}`),
   check: svg(18, 14, stroke("M1.5 7.5 6.5 12 16.5 2", 2.2)),
+  computer: svg(20, 16, `<rect x="1" y="1" width="18" height="11" rx="1.6" stroke="currentColor" stroke-width="1.5"/>${stroke("M7 15h6M10 12v3")}`),
+  network: svg(18, 18, `<circle cx="9" cy="9" r="7.8" stroke="currentColor" stroke-width="1.4"/><ellipse cx="9" cy="9" rx="3.4" ry="7.8" stroke="currentColor" stroke-width="1.2"/>${stroke("M1.5 6.5h15M1.5 11.5h15", 1.2)}`),
   folder: svg(13, 11, `<path d="M1 2.2C1 1.5 1.5 1 2.2 1h2.6l1.3 1.3h4.7c.7 0 1.2.5 1.2 1.2v5.3c0 .7-.5 1.2-1.2 1.2H2.2C1.5 9.8 1 9.3 1 8.6Z" fill="var(--ter)"/>`),
   folderBig: svg(18, 15, `<path d="M1.5 3C1.5 2 2.2 1.5 3 1.5h3.6l1.8 1.8H15c.9 0 1.5.6 1.5 1.5v7.2c0 .9-.6 1.5-1.5 1.5H3c-.8 0-1.5-.6-1.5-1.5Z" stroke="currentColor" stroke-width="1.4"/>`),
   down: svg(10, 6, stroke("M1 1l4 4 4-4")),
@@ -298,7 +303,7 @@ const split = (t) => `<div class="split"><button class="main" ${on("backUp")}>${
 const pair = (a, an, b, bn) => ink(a, an) + `<button class="pill quiet small" ${on(bn)}>${esc(b)}</button>`;
 const text = t => esc(t);
 const tick = st => `<span class="tick ${st === "off" ? "" : "on"}">${st === "on" ? I.tick : st === "some" ? I.dash : ""}</span>`;
-const mark = { ink: `<div class="ic ink">${I.card}</div>`, check: `<div class="ic ink">${I.check}</div>`, quiet: `<div class="ic">${I.cardOut}</div>`, spin: `<div class="ic spin"></div>`, alert: `<div class="ic alert">!</div>`, drive: `<div class="ic">${I.drive}</div>`, folder: `<div class="ic">${I.folderBig}</div>` };
+const mark = { ink: `<div class="ic ink">${I.card}</div>`, check: `<div class="ic ink">${I.check}</div>`, quiet: `<div class="ic">${I.cardOut}</div>`, spin: `<div class="ic spin"></div>`, alert: `<div class="ic alert">!</div>`, drive: `<div class="ic">${I.drive}</div>`, computer: `<div class="ic">${I.computer}</div>`, network: `<div class="ic">${I.network}</div>`, folder: `<div class="ic">${I.folderBig}</div>` };
 const ring = p => `<div class="ring" data-ring="${p}"><svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true"><defs><clipPath id="ringclip"><circle cx="20" cy="20" r="18"/></clipPath></defs><circle cx="20" cy="20" r="18.75" fill="var(--fill3)"/><g clip-path="url(#ringclip)"><path class="w1" fill="var(--ink)" opacity=".13"/><path class="w2" fill="var(--ink)" opacity=".26"/></g><circle cx="20" cy="20" r="18.75" stroke="var(--fill2)" stroke-width="2.5"/><circle class="arc" cx="20" cy="20" r="18.75" stroke="var(--ink)" stroke-width="2.5" stroke-linecap="round" pathLength="100" stroke-dasharray="100" transform="rotate(-90 20 20)"/></svg><em></em></div>`;
 
 function timeLeft(p) {
@@ -372,6 +377,7 @@ function panelState() {
   if (!s.dest) { v.drive = mark.folder; v.driveTitle = "Choose"; v.driveLine = "a backup folder"; }
   else {
     v.driveTitle = drive;
+    v.drive = s.dest_kind === "internal" ? mark.computer : s.dest_kind === "network" ? mark.network : mark.drive;
     if (!s.dest_drive_connected) { v.drive = mark.alert; v.driveLine = "Not connected"; v.driveBad = true; }
   }
   if (!ready) {
@@ -395,7 +401,7 @@ function panelState() {
     return v;
   }
   if (!s.dest_drive_connected) {
-    v.info = [line(`Plug in ${drive} to back up`, true), line("or choose another folder")];
+    v.info = [line(s.dest_kind === "network" ? `Connect to ${drive} to back up` : `Plug in ${drive} to back up`, true), line("or choose another folder")];
     v.slot = quiet("Choose Another Folder…", "pickBackup");
     return v;
   }
@@ -570,7 +576,7 @@ function hdrPage() {
   let content;
   if (s.hdr_missing) content = message(mark.alert, "HDR Merge isn't available", s.hdr_missing);
   else if (!s.hdr_folder) content = message(tile("", true), "Choose a folder", "offcard finds the bracketed shots in it,\nand in every folder inside it.");
-  else if (!s.hdr_folder_exists) content = message(mark.alert, `${place(s.hdr_folder).drive} isn't connected`, "Plug it in to see its bracketed shots", true);
+  else if (!s.hdr_folder_exists) content = message(mark.alert, `${place(s.hdr_folder).drive} isn't connected`, "Connect it to see its bracketed shots", true);
   else if (busy && j.kind === "scan") {
     const p = j.progress;
     content = message(mark.spin, "Looking for bracketed shots…", p?.stage === "Making previews" ? "Almost done" : p ? `Reading ${num(p.done)} of ${num(p.total)} photos in ${folderName}` : `In ${folderName}`);

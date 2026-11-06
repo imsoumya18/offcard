@@ -249,7 +249,7 @@ struct HDRPage: View {
                     sub: "offcard finds the bracketed shots in it,\nand in every folder inside it.")
         } else if !s.hdr_folder_exists.bool {
             Message(glyph: AnyView(BigBadge(mark: .alert("exclamationmark"))), title: "\(place(s.hdr_folder.str).drive) isn't connected",
-                    sub: "Plug it in to see its bracketed shots", bad: true)
+                    sub: "Connect it to see its bracketed shots", bad: true)
         } else if busy && job.kind.str == "scan" {
             let p = job.progress
             Message(glyph: AnyView(BigBadge(mark: .spinner)), title: "Looking for bracketed shots…",

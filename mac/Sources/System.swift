@@ -1,6 +1,7 @@
 // macOS integration: opening at login, folder pickers, Finder, and the menu bar icon.
 
 import AppKit
+import IOKit.ps
 import ServiceManagement
 
 enum System {
@@ -43,6 +44,24 @@ enum System {
     static func showInFinder(_ path: String) {
         NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }
+
+    // MARK: where a backup goes
+
+    /// The icon for a backup location: this Mac (a laptop, or a desktop if it has no battery), a
+    /// network location, or a drive.
+    static func locationSymbol(_ kind: String) -> String {
+        switch kind {
+        case "internal": return hasBattery ? "laptopcomputer" : "desktopcomputer"
+        case "network": return "network"
+        default: return "externaldrive.fill"
+        }
+    }
+
+    private static let hasBattery: Bool = {
+        guard let info = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
+              let list = IOPSCopyPowerSourcesList(info)?.takeRetainedValue() as? [CFTypeRef] else { return false }
+        return !list.isEmpty
+    }()
 
     // MARK: a native menu where the pointer is
 

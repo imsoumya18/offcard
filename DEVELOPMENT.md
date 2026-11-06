@@ -87,6 +87,10 @@ OFFCARD_DEV=1 ...                                 # skip the login item set-up (
 - **Window.** Running `offcard.py` from source opens the page in a native window
   ([pywebview](https://pywebview.flowrl.com/)) on Windows and Mac. On Linux, or if that window can't
   start, it opens in the default browser and quits about 45 seconds after the page is closed.
+- **Backup location.** Any folder but one on a memory card (`build_plan` and `/api/dest` both refuse that).
+  `location_kind` says whether it's on this computer, a drive or the network, and the choice is kept in
+  the config as `dest_kind`, so a network location that drops off still reads as one. The panels pick
+  their icon and wording from it. On Windows, every drive but `C:` that isn't remote counts as a drive.
 - **Folder picker.** A native dialog everywhere: the app's own on Mac and Windows, pywebview's in its window, otherwise AppleScript,
   PowerShell, `zenity` or `kdialog`. You can also paste a path.
 - **Engine loading.** The app loads `engine.py` and `hdr.py` at start-up. Because of that, the app
