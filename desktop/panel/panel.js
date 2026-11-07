@@ -509,7 +509,7 @@ function backupPage() {
   const place_ = s.dest ? (place(s.dest).folder || "Whole drive") : "";
   const dest = v.driveLine !== null
     ? `<div class="small ${v.driveBad ? "bad" : ""}">${esc(v.driveLine)}</div>`
-    : `<div class="small"><button class="dest" ${on("destMenu")} ${job().state === "running" ? "disabled" : ""} title="Choose where this backup goes"><span>${esc(place_)}</span>${I.updown}</button></div>`;
+    : `<div class="small"><button class="dest" ${on("destMenu")} ${job().state === "running" && job().kind !== "plan" ? "disabled" : ""} title="Choose where this backup goes"><span>${esc(place_)}</span>${I.updown}</button></div>`;
   const update = s.update ? updateRow() : "";
   return `<div class="flow">
       <div class="tile ${v.cardDim ? "dim" : ""}">${v.card}<div class="name">${esc(v.cardTitle)}</div><div class="small ${v.cardBad ? "bad" : ""}">${esc(v.cardLine)}</div></div>

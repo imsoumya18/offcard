@@ -33,7 +33,7 @@ import time
 import zipfile
 from datetime import datetime
 
-__version__ = "0.14.0"
+__version__ = "0.14.1"
 IS_WIN = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
 TRASH = "Recycle Bin" if IS_WIN else "Trash"
@@ -555,11 +555,20 @@ def read_item(it):
 
 # ---------------------------------------------------------------- destination scan
 
+class Cancelled(Exception):
+    """A check was stopped (the backup folder changed), and its result is no longer wanted."""
+
+
+def _stop_if(cancel):
+    if cancel is not None and cancel.is_set():
+        raise Cancelled()
+
+
 class DestIndex:
     """Files already in the destination, matched one by one by size + content fingerprint.
     Names and dates in the backup don't matter, so renamed or re-dated files still match."""
 
-    def __init__(self, dest):
+    def __init__(self, dest, cancel=None):
         self.dest = dest
         self.by_size = {}
         self.max_photo = 0
@@ -569,6 +578,7 @@ class DestIndex:
         if not os.path.isdir(dest):
             return
         for dirpath, dirnames, filenames in os.walk(dest):
+            _stop_if(cancel)
             dirnames[:] = [d for d in dirnames if not d.startswith(".") and d != HDR_DIR]  # HDRs are made, not backed up
             for fn in filenames:
                 if fn.startswith("."):
@@ -741,10 +751,12 @@ def free_bytes(path):
     return shutil.disk_usage(p).free
 
 
-def build_plan(dest, cards):
+def build_plan(dest, cards, cancel=None):
+    """What a backup of these cards into dest would copy. cancel: a threading.Event that stops it
+    (raising Cancelled) between files."""
     if card_root(dest):
         raise RuntimeError("That folder is on a memory card, and offcard never writes to a card.")
-    index = DestIndex(dest)
+    index = DestIndex(dest, cancel)
     new, fills, seen_keys, per_card = [], [], set(), {}
     listed = [(card, scan_card(card)) for card in cards]
     bar = Bar(sum(len(items) for _, items in listed), "Checking", ACCENT)
@@ -753,6 +765,9 @@ def build_plan(dest, cards):
                  "already_photos": 0, "already_videos": 0, "new_photos": 0, "new_videos": 0,
                  "new_xml": 0, "repairs": 0, "new_bytes": 0, "from": None, "to": None}
         for it in items:
+            _stop_if(cancel)
+            if os.environ.get("OFFCARD_TEST_SLOW"):   # tests: time to change the folder mid-check
+                time.sleep(float(os.environ["OFFCARD_TEST_SLOW"]))
             read_item(it)
             bar.update(1)
             is_video = it["kind"] == "video"
@@ -971,6 +986,8 @@ def run_import(plan):
     for it in items:
         try:
             for src, dst in zip(it["files"], it["targets"]):
+                if os.environ.get("OFFCARD_TEST_SLOW"):
+                    time.sleep(float(os.environ["OFFCARD_TEST_SLOW"]))
                 if os.path.exists(dst):
                     raise IOError(f"target already exists: {dst}")
                 copy_file(src, dst, progress)

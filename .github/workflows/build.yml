@@ -65,6 +65,7 @@ jobs:
           python hdr.py selftest
           python tests/app_test.py python offcard.py
           python tests/agent_test.py python offcard.py
+          python tests/dest_change_test.py python offcard.py
 
       - name: Build the app
         shell: bash

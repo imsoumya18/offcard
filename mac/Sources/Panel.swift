@@ -812,7 +812,7 @@ struct PanelView: View {
                     .foregroundStyle(.secondary)
             }
             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-            .disabled(s.job.state.str == "running")
+            .disabled(s.job.state.str == "running" && s.job.kind.str != "plan")   // a check restarts for the new folder
             .help("Choose where this backup goes")
         }
     }

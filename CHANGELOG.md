@@ -5,6 +5,12 @@ when a new version is out.
 
 offcard was called **ShotLoft** up to v0.9.1, and **Sony Import** up to v0.4.0.
 
+## [0.14.1] - 2026-11-07
+
+- **Change the backup folder while the card is being checked.** The check stops and starts again for
+  the new folder, instead of making you wait. During a backup or Check Before Formatting, the folder
+  stays as it is.
+
 ## [0.14.0] - 2026-11-06
 
 - **Update in one click.** On Mac and Windows, **Update to x.y.z** in the panel now downloads the new

@@ -65,6 +65,8 @@ class App:
         self.lock = threading.Lock()
         self.dest = E.load_config().get("dest")
         self.job = None          # {"kind", "state": running|done|error, "progress", "result", "error"}
+        self.cancel = threading.Event()   # stops the running check
+        self.thread = None
         self.hdr_job = None      # the same, for HDR Merge (scan or merge), which runs alongside a backup
         self.hdr_folder = E.load_config().get("hdr_folder")
         self.hdr_sets = None     # the last scan's bracket sets (engine.find_brackets)
@@ -90,7 +92,8 @@ class App:
                 raise RuntimeError("Something is already running. Wait for it to finish.")
             self.job = {"kind": kind, "state": "running", "progress": None, "result": None, "error": None,
                         "id": time.time()}
-        job = self.job
+            self.cancel = threading.Event()
+        job, cancel = self.job, self.cancel
 
         def hook(label, done, total, files_done, files_total, nbytes, elapsed):
             job["progress"] = {"label": label, "done": done, "total": total, "files_done": files_done,
@@ -99,16 +102,33 @@ class App:
         def run():
             E.PROGRESS_HOOK = hook
             try:
-                job["result"] = fn()
+                job["result"] = fn(cancel) if kind == "plan" else fn()
                 job["state"] = "done"
+            except E.Cancelled:
+                job["state"] = "cancelled"
+                with self.lock:
+                    if self.job is job:
+                        self.job = None
             except Exception as e:
                 job["error"] = str(e)
                 job["state"] = "error"
             finally:
                 E.PROGRESS_HOOK = None
 
-        threading.Thread(target=run, daemon=True).start()
+        self.thread = threading.Thread(target=run, daemon=True)
+        self.thread.start()
         return {"started": kind}
+
+    def stop_check(self):
+        """Stop a running check and wait for it to go. Anything else that's running can't be stopped."""
+        with self.lock:
+            job, thread = self.job, self.thread
+            if not job or job["state"] != "running":
+                return
+            if job["kind"] != "plan":
+                raise RuntimeError("Wait until this finishes, then choose another folder.")
+            self.cancel.set()
+        thread.join(30)
 
 
     def start_hdr(self, kind, fn):
@@ -313,7 +333,10 @@ def api_set_dest(body):
     if E.card_root(path):
         raise RuntimeError("That folder is on a memory card, and offcard never writes to a card. "
                            "Choose a folder on this computer or on a drive.")
-    APP.dest, APP.plan = path, None
+    if APP.job and APP.job["state"] == "running" and APP.job["kind"] != "plan":
+        raise RuntimeError("Wait until this finishes, then choose another folder.")
+    APP.dest, APP.plan = path, None     # first, so a check that starts now is for the new folder
+    APP.stop_check()                    # a check for the old folder: stop it, so the app checks again
     cfg = E.load_config()
     recent = [path] + [p for p in cfg.get("recent_dests", []) if p != path]
     E.save_config({**cfg, "dest": path, "dest_kind": E.location_kind(path), "recent_dests": recent[:5]})
@@ -363,9 +386,11 @@ def api_plan(_):
     dest = APP.dest
     APP.plan_key = [sorted(cards), dest]
 
-    def run():
-        APP.plan = E.build_plan(os.path.abspath(dest), cards)
-        return plan_summary(APP.plan)
+    def run(cancel):
+        plan = E.build_plan(os.path.abspath(dest), cards, cancel)
+        E._stop_if(cancel)
+        APP.plan = plan
+        return plan_summary(plan)
     return APP.start("plan", run)
 
 
