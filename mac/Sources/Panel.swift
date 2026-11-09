@@ -319,21 +319,29 @@ struct SlotView: View {
 }
 
 /// Quit, highlighted under the pointer like a menu item; ⌘Q works too.
-struct QuitButton: View {
+/// The footer's ⋯: a native menu with updating and Quit. A dot on it says an update is waiting.
+/// ⌘Q still quits.
+struct MoreButton: View {
+    let badge: Bool
+    let items: () -> [System.MenuItem]
     @State private var hover = false
     var body: some View {
-        Button { NSApp.terminate(nil) } label: {
-            Text("Quit").font(.system(size: 11, weight: .medium))
+        Button { System.popUpMenu(items()) } label: {
+            Image(systemName: "ellipsis").font(.system(size: 11, weight: .bold))
                 .foregroundStyle(hover ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
-                .padding(.horizontal, 9).frame(height: 22)
+                .frame(width: 26, height: 22)
                 .background(Capsule().fill(Color.primary.opacity(hover ? 0.1 : 0)))
+                .overlay(alignment: .topTrailing) {
+                    if badge { Circle().fill(Color.primary).frame(width: 6, height: 6).offset(x: -3, y: 2) }
+                }
                 .contentShape(Capsule())
         }
         .buttonStyle(PressStyle())
-        .keyboardShortcut("q")
         .onHover { hover = $0 }
         .animation(.easeOut(duration: 0.12), value: hover)
-        .help("Quit offcard (⌘Q)")
+        .help(badge ? "An update is ready · Quit" : "Check for updates · Quit")
+        .accessibilityLabel(badge ? "More: an update is ready" : "More")
+        .background(Button("") { NSApp.terminate(nil) }.keyboardShortcut("q").opacity(0).allowsHitTesting(false))
     }
 }
 
@@ -367,6 +375,7 @@ struct PanelView: View {
     @Environment(\.colorScheme) private var scheme
     @State private var note: (text: String, bad: Bool)?
     @State private var loginOn = System.opensAtLogin
+    @State private var upToDateUntil: Date?
 
     @State private var path: [Page] = []          // the pages over the backup page, deepest last
     @State private var backupHeight: CGFloat = 293
@@ -454,10 +463,6 @@ struct PanelView: View {
             SlotView(slot: v.slot).padding(.horizontal, Metrics.inset).padding(.top, 10).padding(.bottom, 14)
 
             Hairline()
-            if let latest = s.update.latest.string {
-                updateRow(latest)
-                Hairline()
-            }
             MenuRow(symbol: "camera.filters", title: "HDR Merge", detail: hdrDetail) { openHDR() }
             Hairline()
             footer
@@ -632,29 +637,6 @@ struct PanelView: View {
             return v
         }
         return v
-    }
-
-    /// A newer version: one click downloads and installs it, and offcard comes back on it. If this
-    /// copy can't update itself, or that failed, the install line is still there.
-    @ViewBuilder func updateRow(_ latest: String) -> some View {
-        let job = s.update_job, st = job.state.str
-        if st == "running" || st == "ready" || st == "applying" {
-            let p = job.progress
-            let detail = st == "running" ? (p.total.double > 0 ? "\(Int(p.done.double * 100 / p.total.double))%" : "Starting…")
-                : engine.running ? "After this finishes" : "Restarting…"
-            MenuRow(symbol: "arrow.down", title: "Updating to \(latest)", detail: detail, active: true) {}
-        } else if s.can_update.bool && st != "error" {
-            MenuRow(symbol: "arrow.down", title: "Update to \(latest)", detail: "Update", active: true) {
-                note = nil
-                Task { await say(engine.act("/api/update")) }
-            }
-        } else {
-            MenuRow(symbol: "arrow.down", title: "Update to \(latest)", detail: "Copy Install Line", active: true) {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(s.update.line.str, forType: .string)
-                note = ("Install line copied. Paste it into Terminal.", false)
-            }
-        }
     }
 
     /// Ready to back up: the day's folder, named for its tag, with "+ Add tag" (typed in place); or,
@@ -861,12 +843,69 @@ struct PanelView: View {
                 .contentShape(Rectangle())
                 .onTapGesture { setLogin(!loginOn) }
             Spacer(minLength: 6)
-            Text("v\(appVersion)").font(.system(size: 11)).monospacedDigit().foregroundStyle(.tertiary)
-                .help("The version of offcard you have")
-            QuitButton()
+            versionLine
+            MoreButton(badge: s.update.latest.exists && !engine.running && !updating) { moreItems }
         }
         .padding(.leading, Metrics.inset).padding(.trailing, 8).frame(height: 34)
         .background(Color.primary.opacity(0.035))
+    }
+
+    /// The version, or how an update is going, or that a check found nothing newer.
+    @ViewBuilder var versionLine: some View {
+        let job = s.update_job, p = job.progress
+        if updating {
+            let f = p.total.double > 0 ? p.done.double / p.total.double : 0
+            HStack(spacing: 5) {
+                MiniRing(p: f).frame(width: 12, height: 12)
+                Text(job.state.str == "running" ? "Updating to \(job.version.str) · \(Int(f * 100))%" : "Restarting…")
+                    .font(.system(size: 11)).monospacedDigit().foregroundStyle(.secondary)
+            }
+        } else if let until = upToDateUntil, until > Date() {
+            Text("Up to date · v\(appVersion)").font(.system(size: 11)).foregroundStyle(.secondary)
+        } else {
+            Text("v\(appVersion)").font(.system(size: 11)).monospacedDigit().foregroundStyle(.tertiary)
+                .help("The version of offcard you have")
+        }
+    }
+
+    var updating: Bool { ["running", "ready", "applying"].contains(s.update_job.state.str) }
+
+    /// The ⋯ menu: updating (only when offcard isn't doing anything else), then Quit.
+    var moreItems: [System.MenuItem] {
+        var items: [System.MenuItem]
+        let latest = s.update.latest.string
+        if updating {
+            items = [.init(title: "Updating…", enabled: false) {}]
+        } else if engine.running {
+            items = [.init(title: latest.map { "Update to \($0)" } ?? "Check for Updates…", enabled: false) {},
+                     .init(title: "Available when this finishes", enabled: false) {}]
+        } else if let latest, s.can_update.bool {
+            items = [.init(title: "Update to \(latest)") { Task { await say(engine.act("/api/update")) } }]
+        } else if let latest {
+            items = [.init(title: "Copy Update Command for \(latest)") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(s.update.line.str, forType: .string)
+                note = ("Update command copied. Paste it into Terminal.", false)
+            }]
+        } else {
+            items = [.init(title: "Check for Updates…") { checkForUpdates() }]
+        }
+        return items + [.separator, .init(title: "Quit offcard", detail: "⌘Q") { NSApp.terminate(nil) }]
+    }
+
+    func checkForUpdates() {
+        note = nil
+        Task {
+            do {
+                let r = try await engine.call("/api/update/check", [:])
+                if !r.newer.exists {
+                    upToDateUntil = Date().addingTimeInterval(4)
+                    try? await Task.sleep(nanoseconds: 4_100_000_000)
+                    upToDateUntil = nil
+                }
+            } catch { note = (error.localizedDescription, true) }
+            await engine.refresh()
+        }
     }
 
     var appVersion: String {

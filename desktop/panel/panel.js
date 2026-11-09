@@ -226,7 +226,7 @@ function copyUpdate() {
   const t = document.createElement("textarea");
   t.value = s.update.line; document.body.append(t); t.select();
   document.execCommand("copy"); t.remove();
-  note = { text: `Install line copied. Paste it into ${s.update.line.startsWith("irm") ? "PowerShell" : "Terminal"}.`, bad: false };
+  note = { text: `Update command copied. Paste it into ${s.update.line.startsWith("irm") ? "PowerShell" : "Terminal"}.`, bad: false };
   render();
 }
 const setLogin = async on => { const r = await call("login_set", { on }); loginOn = r === null ? on : r; render(); };
@@ -501,15 +501,26 @@ function hdrDetail() {
   if (j?.state === "running") return j.kind === "merge" ? "Merging…" : "";
   return s.hdr_new > 0 ? plural(s.hdr_new, "new set") : "";
 }
-/** A newer version: one click downloads and installs it. The install line stays for when it can't. */
-function updateRow() {
-  const u = s.update_job, st = u?.state, latest = esc(s.update.latest);
-  const row = (act, title, detail) => `<button class="mrow" ${act ? on(act) : ""}><span class="gl ink">${I.arrow}</span><span class="t">${title}</span><span class="d">${esc(detail)}</span></button><div class="rule tight"></div>`;
-  if (st === "running" || st === "ready" || st === "applying") {
-    const p = u.progress;
-    return row(null, `Updating to ${latest}`, st === "running" ? (p?.total ? `${Math.floor(p.done * 100 / p.total)}%` : "Starting…") : running() ? "After this finishes" : "Restarting…");
+const updating = () => ["running", "ready", "applying"].includes(s.update_job?.state);
+const updateWaiting = () => !!s.update && !running() && !updating();
+let upToDateUntil = 0;
+/** The version, or how an update is going, or that a check found nothing newer. */
+function versionLine() {
+  if (updating()) {
+    const p = s.update_job.progress, f = p?.total ? p.done / p.total : 0;
+    const label = s.update_job.state === "running" ? `Updating to ${esc(s.update_job.version)} · ${Math.floor(f * 100)}%` : "Restarting…";
+    return `<span class="v now"><svg class="mini" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7" stroke="var(--fill2)" stroke-width="2.4"/><circle cx="9" cy="9" r="7" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round" pathLength="100" stroke-dasharray="100" stroke-dashoffset="${100 * (1 - Math.max(.02, f))}" transform="rotate(-90 9 9)"/></svg>${label}</span>`;
   }
-  return s.can_update && st !== "error" ? row("startUpdate", `Update to ${latest}`, "Update") : row("copyUpdate", `Update to ${latest}`, "Copy Install Line");
+  if (Date.now() < upToDateUntil) return `<span class="v now">Up to date · v${esc(s.version || "")}</span>`;
+  return `<span class="v" title="The version of offcard you have">v${esc(s.version || "")}</span>`;
+}
+async function checkForUpdates() {
+  note = null;
+  try {
+    const r = await api("/api/update/check", {});
+    if (!r.newer) { upToDateUntil = Date.now() + 4000; setTimeout(render, 4100); }
+  } catch (e) { note = { text: String(e), bad: true }; }
+  refresh();
 }
 function backupPage() {
   const v = panelState();
@@ -517,7 +528,6 @@ function backupPage() {
   const dest = v.driveLine !== null
     ? `<div class="small ${v.driveBad ? "bad" : ""}">${esc(v.driveLine)}</div>`
     : `<div class="small"><button class="dest" ${on("destMenu")} ${job().state === "running" && job().kind !== "plan" ? "disabled" : ""} title="Choose where this backup goes"><span>${esc(place_)}</span>${I.updown}</button></div>`;
-  const update = s.update ? updateRow() : "";
   return `<div class="flow">
       <div class="tile ${v.cardDim ? "dim" : ""}">${v.card}<div class="name">${esc(v.cardTitle)}</div><div class="small ${v.cardBad ? "bad" : ""}">${esc(v.cardLine)}</div></div>
       <div class="chev ${v.copying ? "run" : ""}">${I.chev}</div>
@@ -525,9 +535,9 @@ function backupPage() {
     </div>
     <div class="info">${v.info.join("")}</div>
     <div class="slot">${v.slot}</div>
-    <div class="rule"></div>${update}
+    <div class="rule"></div>
     <button class="mrow" ${on("push", "hdr")}><span class="gl">${I.hdr}</span><span class="t">HDR Merge</span><span class="d">${esc(hdrDetail())}</span></button>
-    <div class="foot"><button class="login" ${on("toggleLogin")} role="switch" aria-checked="${loginOn}"><span class="sw ${loginOn ? "on" : ""}"></span><span>Start with Windows</span></button><span class="sp"></span><span class="v" title="The version of offcard you have">v${esc(s.version || "")}</span><button class="quit" ${on("quit")} title="Quit offcard">Quit</button></div>`;
+    <div class="foot"><button class="login" ${on("toggleLogin")} role="switch" aria-checked="${loginOn}"><span class="sw ${loginOn ? "on" : ""}"></span><span>Start with Windows</span></button><span class="sp"></span>${versionLine()}<button class="dotsbtn" ${on("footMenu")} title="${updateWaiting() ? "An update is ready · Quit" : "Check for updates · Quit"}" aria-label="More">${I.dots}${updateWaiting() ? `<span class="badge"></span>` : ""}</button></div>`;
 }
 const head = (title, sub, options) => `<div class="phead"><button class="round" ${on("pop")} title="Back" aria-label="Back">${I.left}</button><div class="tt"><b>${esc(title)}</b><div class="sub">${sub}</div></div>${options ? `<button class="round" ${on(options)} title="Options" aria-label="Options">${I.dots}</button>` : "<span></span>"}</div><div class="rule tight"></div>`;
 const pfoot = slot => `<div class="pfoot"><div class="slot">${slot}</div></div>`;
@@ -655,7 +665,6 @@ const DO = {
   backUp, verify, eject, retry, pickBackup, moveExtras, copyUpdate, hdrMerge, hdrChoose, hdrRetry,
   beginTag, push, pop,
   pushDays: () => push("days"),
-  startUpdate() { note = null; act("/api/update").then(say); },
   commitTag: (d, t) => setTag(d, t),
   toggleLogin: () => setLogin(!loginOn),
   quit: () => call("quit"),
@@ -711,6 +720,16 @@ const DO = {
       "-", { title: "Also Save a 16-bit TIFF", checked: hdr.tiff, run() { hdr.tiff = !hdr.tiff; } },
       "-", { title: "Look Again", enabled: !busy && !!s.hdr_folder_exists, run() { hdr.sets = null; hdrScan(); render(); } },
     ], from);
+  },
+  footMenu(from) {
+    const latest = s.update?.latest;
+    let items;
+    if (updating()) items = [{ title: "Updating…", enabled: false }];
+    else if (running()) items = [{ title: latest ? `Update to ${latest}` : "Check for Updates…", enabled: false }, { title: "Available when this finishes", enabled: false }];
+    else if (latest && s.can_update) items = [{ title: `Update to ${latest}`, run: () => act("/api/update").then(say) }];
+    else if (latest) items = [{ title: `Copy Update Command for ${latest}`, run: copyUpdate }];
+    else items = [{ title: "Check for Updates…", run: checkForUpdates }];
+    openMenu([...items, "-", { title: "Quit offcard", detail: "Ctrl+Q", run: () => call("quit") }], from);
   },
   hdrFolderMenu(from) {
     const items = [{ title: "Choose Another Folder…", run: hdrChoose }];
@@ -828,6 +847,7 @@ document.addEventListener("keydown", e => {
     if (menu) closeMenu(); else if (path.length) pop(); else call("hide_panel");
   }
   if (e.key === "F5" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "r")) e.preventDefault();
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "q") { e.preventDefault(); call("quit"); }
 });
 document.addEventListener("contextmenu", e => { if (!e.target.matches("input")) e.preventDefault(); });
 window.addEventListener("focus", async () => { loginOn = await call("login_get") ?? loginOn; refresh(); });

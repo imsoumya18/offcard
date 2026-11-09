@@ -108,6 +108,11 @@ button:active:not(:disabled) { opacity: .75; }
 .sw.on::after { transform: translateX(16px); background: var(--paper); }
 .foot .sp { flex: 1; }
 .foot .v { color: var(--ter); font-variant-numeric: tabular-nums; }
+.dotsbtn { position: relative; width: 28px; height: 24px; border-radius: 12px; display: grid; place-items: center; color: var(--sub); }
+.dotsbtn:hover { background: var(--fill); color: var(--text); }
+.dotsbtn .badge { position: absolute; top: 3px; right: 4px; width: 6px; height: 6px; border-radius: 50%; background: var(--text); box-shadow: 0 0 0 1.5px var(--bg); }
+.foot .v.now { color: var(--sub); display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.foot .v .mini { width: 12px; height: 12px; }
 .quit { height: 24px; padding: 0 10px; border-radius: 12px; font-weight: 500; color: var(--text); }
 .quit:hover { background: var(--fill); }
 

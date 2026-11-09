@@ -85,6 +85,8 @@ def main():
         open(os.path.join(release, "SHA256SUMS"), "w").write(f"{'0' * 64}  {name}\n")
         e = Engine(root, tmp, url, version)
         assert e.call("/api/state")[1]["can_update"], "this build says it can't update itself"
+        st, r = e.call("/api/update/check", {})       # the release is this same version: nothing newer
+        assert st == 200 and r["newer"] is None, r
         assert e.call("/api/update", {})[0] == 200
         j = e.wait_update()
         assert j["state"] == "error" and "checksum" in j["error"], j

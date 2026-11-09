@@ -293,8 +293,31 @@ def update_job_brief():
     return j and {k: j[k] for k in ("state", "version", "progress", "error")}
 
 
+def busy():
+    return bool((APP.job and APP.job["state"] == "running") or (APP.hdr_job and APP.hdr_job["state"] == "running"))
+
+
+def api_update_check(_):
+    """Check for updates now (from the panel's ⋯ menu). If there's a newer version and this copy can
+    update itself, start downloading it straight away."""
+    if busy():
+        raise RuntimeError("Check for updates when this finishes.")
+    found = os.environ.get("OFFCARD_TEST_UPDATE_VERSION") or E.latest_version(timeout=10)
+    if not found:
+        raise RuntimeError("Couldn't reach GitHub. Check your internet connection.")
+    APP.update.latest = found
+    if E._vtuple(found) <= E._vtuple(E.__version__):
+        return {"newer": None, "latest": found}
+    if E.install_root() is None:
+        return {"newer": found, "started": False}
+    api_update({})
+    return {"newer": found, "started": True}
+
+
 def api_update(_):
     """Download the newer version and get it ready. The app asks for it to be applied when it's idle."""
+    if busy():
+        raise RuntimeError("Update when this finishes.")
     version = os.environ.get("OFFCARD_TEST_UPDATE_VERSION") or APP.update.newer()
     if not version:
         raise RuntimeError("offcard is up to date.")
@@ -707,7 +730,7 @@ ROUTES = {"/api/state": api_state, "/api/dest": api_set_dest, "/api/pick": api_p
           "/api/hdr/pick": api_hdr_pick, "/api/hdr/scan": api_hdr_scan, "/api/hdr/merge": api_hdr_merge,
           "/api/hdr/sets": api_hdr_sets, "/api/reveal": api_reveal, "/api/tag": api_tag,
           "/api/plan/items": api_plan_items, "/api/plan/thumbs": api_plan_thumbs,
-          "/api/update": api_update, "/api/update/apply": api_update_apply}
+          "/api/update": api_update, "/api/update/apply": api_update_apply, "/api/update/check": api_update_check}
 
 
 class Handler(http.server.BaseHTTPRequestHandler):

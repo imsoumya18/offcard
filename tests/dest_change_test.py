@@ -55,6 +55,9 @@ def main():
             assert call("/api/plan", {})[0] == 200
             time.sleep(0.8)
             assert job()["state"] == "running", "the check should still be running"
+            for path in ("/api/update/check", "/api/update"):     # no updating while something runs
+                st, r = call(path, {})
+                assert st == 400 and "finishes" in r["error"], (path, r)
 
             # Change the folder mid-check, three times quickly: each stops the check that's running.
             for dest in (b, c, d):

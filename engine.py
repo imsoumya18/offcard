@@ -33,7 +33,7 @@ import time
 import zipfile
 from datetime import datetime
 
-__version__ = "0.14.2"
+__version__ = "0.15.0"
 IS_WIN = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
 TRASH = "Recycle Bin" if IS_WIN else "Trash"
@@ -1325,23 +1325,36 @@ def latest_version(timeout=3):
 
 
 class UpdateCheck:
-    """Looks for a newer release in the background, so the app never waits for the network."""
+    """Looks for a newer release in the background, so the app never waits for the network. The app
+    can run for days, so it looks again every few hours (OFFCARD_UPDATE_EVERY, in seconds)."""
 
     def __init__(self):
         self.latest = None
-        if os.environ.get("OFFCARD_NO_UPDATE_CHECK"):
-            self.thread = None
-            return
+        self.thread = None
+        self.every = float(os.environ.get("OFFCARD_UPDATE_EVERY") or 3 * 3600)
+        self.started = 0.0
+        self.looked = False
+        if not os.environ.get("OFFCARD_NO_UPDATE_CHECK"):
+            self._start()
+
+    def _start(self):
         import threading
+        self.started = time.time()
         self.thread = threading.Thread(target=self._run, daemon=True)
         self.thread.start()
 
     def _run(self):
-        self.latest = latest_version()
+        found = latest_version()
+        if found:                    # offline for a moment: keep what was found before
+            self.latest = found
 
     def newer(self):
         if self.thread:
-            self.thread.join(timeout=0.5)  # by the end of a run it has long finished
+            if not self.looked:
+                self.thread.join(timeout=0.5)  # the first look: by the end of a run it has long finished
+                self.looked = True
+            if not self.thread.is_alive() and time.time() - self.started > self.every:
+                self._start()
         return self.latest if self.latest and _vtuple(self.latest) > _vtuple(__version__) else None
 
 

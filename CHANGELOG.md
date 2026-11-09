@@ -5,6 +5,14 @@ when a new version is out.
 
 offcard was called **ShotLoft** up to v0.9.1, and **Sony Import** up to v0.4.0.
 
+## [0.15.0] - 2026-11-09
+
+- **Updates and Quit are in a ⋯ menu** at the bottom right, where Quit was. **Check for Updates…**
+  checks now, and if there's a newer version it downloads it, quits and reopens offcard on it. A
+  small dot on ⋯ says an update is waiting. While a backup, a check or a merge runs, updating
+  waits. ⌘Q (Ctrl+Q on Windows) still quits.
+- offcard also looks for a new version every few hours while it runs, not only when it starts.
+
 ## [0.14.2] - 2026-11-09
 
 - Check Before Formatting's ring now shows only the comparing, so 50% is half the circle and it
