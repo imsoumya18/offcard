@@ -28,46 +28,71 @@ printf '\n  %soffcard installer%s\n\n' "$TEAL" "$OFF"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
+# GitHub's API can serve a release's files even when its usual download links fail (as they did,
+# with error 504, for some files on 9 Nov 2026). This is that route for $RELEASES, if it has one.
+release_api() {
+  case "$RELEASES" in
+    "https://github.com/$REPO/releases/latest/download") echo "https://api.github.com/repos/$REPO/releases/latest" ;;
+    "https://github.com/$REPO/releases/download/"*) echo "https://api.github.com/repos/$REPO/releases/tags/${RELEASES##*/}" ;;
+  esac
+}
+
+api_asset() {  # name: the API address of that file in the release, or nothing
+  local api; api="$(release_api)"
+  [ -n "$api" ] || return 0
+  curl -fsSL --connect-timeout 10 --retry 2 -H "Accept: application/vnd.github+json" "$api" 2>/dev/null |
+    awk -v want="\"$1\"" '
+      /"url": *"https:\/\/api\.github\.com\/repos\/.*\/releases\/assets\/[0-9]+"/ { u = $2; gsub(/[",]/, "", u) }
+      $1 == "\"name\":" { n = $2; sub(/,$/, "", n); if (n == want && u != "") { print u; exit } }' || true
+}
+
+get() {  # url, file, then any extra curl options: one download, with a progress bar on a terminal
+  local url="$1" out="$2"; shift 2
+  local hdr size pid got pct fill mb tot secs start
+  if [ ! -t 2 ]; then                                    # scripts, CI: no animation
+    curl -fsSL --connect-timeout 10 --retry 2 "$@" "$url" -o "$out" 2>/dev/null
+    return
+  fi
+  # One request: curl writes the response headers to $hdr as they arrive, so the size is known
+  # as soon as GitHub answers, with no extra round trips on slow connections.
+  hdr="$tmp/headers"; : > "$hdr"; : > "$out"
+  curl -fsSL --connect-timeout 10 --retry 2 "$@" -D "$hdr" "$url" -o "$out" 2>/dev/null & pid=$!
+  start=$SECONDS; size=0
+  while kill -0 "$pid" 2>/dev/null; do
+    [ "$size" -gt 0 ] || size="$(tr -d '\r' < "$hdr" | awk 'tolower($1)=="content-length:" {n=$2} END {print n+0}')"
+    got="$(stat -f%z "$out" 2>/dev/null || stat -c%s "$out" 2>/dev/null || echo 0)"
+    secs=$(( SECONDS - start ))
+    if [ "$size" -le 0 ] || [ "$got" -eq 0 ]; then       # nothing yet: show it's still working
+      printf '\r    %sconnecting to GitHub...%s %ss ' "$DIM" "$OFF" "$secs" >&2
+    else
+      pct=$(( got * 100 / size )); [ "$pct" -gt 100 ] && pct=100
+      fill=$(( pct * 30 / 100 ))
+      mb="$(awk -v n="$got" 'BEGIN {printf "%.1f", n/1048576}')"
+      tot="$(awk -v n="$size" 'BEGIN {printf "%.1f", n/1048576}')"
+      printf '\r    %s%s%s%s %3d%%  %s of %s MB    ' "$TEAL" "$(printf '%*s' "$fill" '' | tr ' ' '#')" "$OFF" \
+        "$(printf '%*s' $(( 30 - fill )) '' | tr ' ' '-')" "$pct" "$mb" "$tot" >&2
+    fi
+    sleep 0.2
+  done
+  if wait "$pid"; then
+    got="$(stat -f%z "$out" 2>/dev/null || stat -c%s "$out" 2>/dev/null || echo 0)"
+    mb="$(awk -v n="$got" 'BEGIN {printf "%.1f", n/1048576}')"
+    printf '\r    %s%s%s 100%%  %s MB, done.                 \n' "$TEAL" "$(printf '%30s' '' | tr ' ' '#')" "$OFF" "$mb" >&2
+    return 0
+  fi
+  printf '\r%60s\r' '' >&2                                # failed: clear the line
+  return 1
+}
+
 download() {  # label, file, then one or more release file names to try in order
-  local label="$1" out="$2"; shift 2
-  local name url hdr size pid got pct fill mb tot secs start
+  local label="$1" out="$2" name asset; shift 2
   step "Downloading $label..."
   for name in "$@"; do
-    url="$RELEASES/$name"
-    if [ ! -t 2 ]; then                                    # scripts, CI: no animation
-      curl -fsSL --connect-timeout 10 --retry 2 "$url" -o "$out" 2>/dev/null && return 0
-      continue
-    fi
-    # One request: curl writes the response headers to $hdr as they arrive, so the size is known
-    # as soon as GitHub answers, with no extra round trips on slow connections.
-    hdr="$tmp/headers"; : > "$hdr"; : > "$out"
-    curl -fsSL --connect-timeout 10 --retry 2 -D "$hdr" "$url" -o "$out" 2>/dev/null & pid=$!
-    start=$SECONDS; size=0
-    while kill -0 "$pid" 2>/dev/null; do
-      [ "$size" -gt 0 ] || size="$(tr -d '\r' < "$hdr" | awk 'tolower($1)=="content-length:" {n=$2} END {print n+0}')"
-      got="$(stat -f%z "$out" 2>/dev/null || stat -c%s "$out" 2>/dev/null || echo 0)"
-      secs=$(( SECONDS - start ))
-      if [ "$size" -le 0 ] || [ "$got" -eq 0 ]; then       # nothing yet: show it's still working
-        printf '\r    %sconnecting to GitHub...%s %ss ' "$DIM" "$OFF" "$secs" >&2
-      else
-        pct=$(( got * 100 / size )); [ "$pct" -gt 100 ] && pct=100
-        fill=$(( pct * 30 / 100 ))
-        mb="$(awk -v n="$got" 'BEGIN {printf "%.1f", n/1048576}')"
-        tot="$(awk -v n="$size" 'BEGIN {printf "%.1f", n/1048576}')"
-        printf '\r    %s%s%s%s %3d%%  %s of %s MB    ' "$TEAL" "$(printf '%*s' "$fill" '' | tr ' ' '#')" "$OFF" \
-          "$(printf '%*s' $(( 30 - fill )) '' | tr ' ' '-')" "$pct" "$mb" "$tot" >&2
-      fi
-      sleep 0.2
-    done
-    if wait "$pid"; then
-      got="$(stat -f%z "$out" 2>/dev/null || stat -c%s "$out" 2>/dev/null || echo 0)"
-      mb="$(awk -v n="$got" 'BEGIN {printf "%.1f", n/1048576}')"
-      printf '\r    %s%s%s 100%%  %s MB, done.                 \n' "$TEAL" "$(printf '%30s' '' | tr ' ' '#')" "$OFF" "$mb" >&2
-      return 0
-    fi
-    printf '\r%60s\r' '' >&2                              # not found: clear the line, try the next name
+    get "$RELEASES/$name" "$out" && return 0
+    asset="$(api_asset "$name" || true)"
+    [ -n "$asset" ] && get "$asset" "$out" -H "Accept: application/octet-stream" && return 0
   done
-  fail "Download failed (check your internet connection)"
+  fail "Download failed. GitHub may be having trouble: try again in a minute, and check your internet connection."
 }
 
 wait_until_closed() {  # pgrep pattern: ask the user to quit the app before anything is downloaded

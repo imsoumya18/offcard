@@ -33,7 +33,7 @@ import time
 import zipfile
 from datetime import datetime
 
-__version__ = "0.15.0"
+__version__ = "0.15.1"
 IS_WIN = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
 TRASH = "Recycle Bin" if IS_WIN else "Trash"
@@ -1361,6 +1361,7 @@ class UpdateCheck:
 # ---------------------------------------------------------------- updating from inside the app
 
 RELEASES = os.environ.get("OFFCARD_RELEASES") or "https://github.com/imsoumya18/offcard/releases/download/v{version}"
+RELEASE_API = "https://api.github.com/repos/imsoumya18/offcard/releases/tags/v{version}"
 
 
 def update_asset():
@@ -1387,12 +1388,13 @@ def install_root():
     return root if os.path.exists(os.path.join(root, "offcard.exe") if IS_WIN else os.path.join(root, "Contents")) else None
 
 
-def _fetch(url, out, progress=None):
+def _fetch(url, out, progress=None, accept=None):
     """Download url to out. Falls back to curl, because some Python builds can't find the system's
     certificates."""
     import urllib.request
+    headers = {"User-Agent": f"offcard/{__version__}", **({"Accept": accept} if accept else {})}
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": f"offcard/{__version__}"})
+        req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=10) as resp, open(out, "wb") as f:
             total, done = int(resp.headers.get("Content-Length") or 0), 0
             while True:
@@ -1406,10 +1408,11 @@ def _fetch(url, out, progress=None):
     except Exception:
         if not url.startswith("https://") or not shutil.which("curl"):
             raise
-    head = subprocess.run(["curl", "-sIL", "--connect-timeout", "10", url], capture_output=True, text=True, timeout=60).stdout
+    extra = [arg for k, v in headers.items() for arg in ("-H", f"{k}: {v}")]
+    head = subprocess.run(["curl", "-sIL", "--connect-timeout", "10", *extra, url], capture_output=True, text=True, timeout=60).stdout
     sizes = re.findall(r"(?im)^content-length:\s*(\d+)", head)
     total = int(sizes[-1]) if sizes else 0
-    p = subprocess.Popen(["curl", "-fsSL", "--connect-timeout", "10", "--retry", "2", url, "-o", out],
+    p = subprocess.Popen(["curl", "-fsSL", "--connect-timeout", "10", "--retry", "2", *extra, url, "-o", out],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **_no_window())
     while p.poll() is None:
         time.sleep(0.2)
@@ -1417,6 +1420,29 @@ def _fetch(url, out, progress=None):
             progress(os.path.getsize(out), total)
     if p.returncode:
         raise IOError("the download didn't finish")
+
+
+def _fetch_release(version, name, out, progress=None):
+    """A file from a release. GitHub's API can serve it even when its usual download link fails (as it
+    did, with error 504, for some files on 9 Nov 2026), so that's the second try."""
+    try:
+        return _fetch(RELEASES.format(version=version) + "/" + name, out, progress)
+    except Exception:
+        if os.environ.get("OFFCARD_RELEASES"):    # tests, and anything but GitHub: no second route
+            raise
+    import tempfile
+    listing = tempfile.mktemp()
+    try:
+        _fetch(RELEASE_API.format(version=version), listing, accept="application/vnd.github+json")
+        with open(listing) as f:
+            assets = json.load(f).get("assets", [])
+    finally:
+        if os.path.exists(listing):
+            os.remove(listing)
+    url = next((a["url"] for a in assets if a.get("name") == name), None)
+    if not url:
+        raise IOError(f"the release has no {name}")
+    _fetch(url, out, progress, accept="application/octet-stream")
 
 
 def _no_window():
@@ -1436,15 +1462,14 @@ def download_update(version, progress=None):
     shutil.rmtree(stage, ignore_errors=True)
     os.makedirs(stage)
     try:
-        base = RELEASES.format(version=version)
         sums = os.path.join(stage, "SHA256SUMS")
-        _fetch(f"{base}/SHA256SUMS", sums)
+        _fetch_release(version, "SHA256SUMS", sums)
         with open(sums) as f:
             want = next((line.split()[0] for line in f if line.split()[-1].lstrip("*") == asset), None)
         if not want:
             raise IOError("the release doesn't list a checksum for this download")
         archive = os.path.join(stage, asset)
-        _fetch(f"{base}/{asset}", archive, progress)
+        _fetch_release(version, asset, archive, progress)
         h = hashlib.sha256()
         with open(archive, "rb") as f:
             for buf in iter(lambda: f.read(1024 * 1024), b""):

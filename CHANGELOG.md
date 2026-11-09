@@ -5,6 +5,12 @@ when a new version is out.
 
 offcard was called **ShotLoft** up to v0.9.1, and **Sony Import** up to v0.4.0.
 
+## [0.15.1] - 2026-11-09
+
+- Installing and updating keep working when GitHub's usual download links fail: they fetch the same
+  file through GitHub's API instead. When both fail, the installer now says GitHub may be having
+  trouble, not just to check your connection.
+
 ## [0.15.0] - 2026-11-09
 
 - **Updates and Quit are in a ⋯ menu** at the bottom right, where Quit was. **Check for Updates…**

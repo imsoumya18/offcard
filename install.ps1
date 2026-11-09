@@ -23,7 +23,7 @@
 
     # Downloads with a progress bar. (Invoke-WebRequest's own progress bar makes PowerShell 5 very
     # slow, so the file is read in 1 MB chunks and progress is shown once per percent.)
-    function Get-File($url, $out) {
+    function Get-File($url, $out, $accept) {
         # Show something at once: GitHub can take a while to answer on slow connections.
         Write-Progress -Activity 'Downloading offcard' -Status 'Connecting to GitHub...' -PercentComplete 0
         # A dead server address can hold a connection for a long time, and the next try may get a good one.
@@ -32,6 +32,10 @@
             try {
                 $req = [System.Net.WebRequest]::Create($url)
                 $req.Timeout = 20000
+                if ($req -is [System.Net.HttpWebRequest]) {
+                    $req.UserAgent = 'offcard-installer'
+                    if ($accept) { $req.Accept = $accept }
+                }
                 $resp = $req.GetResponse()
                 break
             } catch {
@@ -61,6 +65,23 @@
     # offcard was called ShotLoft until v0.9.1, and Sony Import until v0.4.0.
     $oldNames = 'ShotLoft', 'Sony Import'
     $oldDirs = $oldNames | ForEach-Object { Join-Path $env:LOCALAPPDATA "Programs\$_" }
+
+    # A release file. GitHub's API can serve it even when its usual download link fails (as it did,
+    # with error 504, for some files on 9 Nov 2026), so that's the second try.
+    function Get-Release($name, $out) {
+        try { Get-File "$releases/$name" $out; return } catch { $first = $_ }
+        $repo = 'https://github.com/imsoumya18/offcard/releases'
+        $api = $null
+        if ($releases -eq "$repo/latest/download") { $api = 'https://api.github.com/repos/imsoumya18/offcard/releases/latest' }
+        elseif ($releases -like "$repo/download/*") { $api = 'https://api.github.com/repos/imsoumya18/offcard/releases/tags/' + ($releases -split '/')[-1] }
+        if (-not $api) { throw $first }
+        try {
+            $asset = (Invoke-RestMethod -Uri $api -UseBasicParsing -Headers @{ 'User-Agent' = 'offcard-installer'; Accept = 'application/vnd.github+json' }).assets |
+                Where-Object { $_.name -eq $name } | Select-Object -First 1
+        } catch { throw $first }
+        if (-not $asset) { throw $first }
+        Get-File $asset.url $out 'application/octet-stream'
+    }
 
     # Windows 10 PCs without the Edge web view get it from Microsoft, for this user.
     function Install-WebView2 {
@@ -102,7 +123,7 @@
         $engine = Join-Path $installDir 'engine'
         $tmp = Join-Path $installDir 'download.zip'
         $new = Join-Path $installDir 'download'
-        Get-File "$releases/offcard-windows.zip" $tmp
+        Get-Release 'offcard-windows.zip' $tmp
         Remove-Item -Recurse -Force $new -ErrorAction SilentlyContinue
         Expand-Archive -Path $tmp -DestinationPath $new
         Remove-Item -Force $tmp
