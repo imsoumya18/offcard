@@ -33,7 +33,7 @@ import time
 import zipfile
 from datetime import datetime
 
-__version__ = "0.14.1"
+__version__ = "0.14.2"
 IS_WIN = os.name == "nt"
 IS_MAC = sys.platform == "darwin"
 TRASH = "Recycle Bin" if IS_WIN else "Trash"

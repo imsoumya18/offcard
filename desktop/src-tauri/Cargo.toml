@@ -1,6 +1,6 @@
 [package]
 name = "offcard"
-version = "0.14.1"
+version = "0.14.2"
 edition = "2021"
 description = "Back up your Sony camera card, sorted by day"
 license = "MIT"

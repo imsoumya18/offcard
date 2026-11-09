@@ -554,6 +554,14 @@ struct PanelView: View {
             v.slot = .text(timeLeft(p) ?? "Copying…")
             return v
         }
+        if st == "running" && kind == "verify" && p.label.str != "Verifying" {
+            // First the card is read to find each file's copy; the ring is only for the comparing after.
+            v.card = .spinner; v.cardLine = "Getting ready…"
+            v.info = [line("Getting ready to compare every file"),
+                      line(p.exists ? "Reading \(p.done.int.formatted()) of \(plural(p.total.int, "file"))" : "Reading the card")]
+            v.slot = .text("Checking…")
+            return v
+        }
         if st == "running" && kind == "verify" {
             v.card = .ring(fraction); v.copying = true; v.cardLine = "Comparing…"
             v.info = [line("Comparing every file byte by byte"),

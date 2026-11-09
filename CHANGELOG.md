@@ -5,6 +5,12 @@ when a new version is out.
 
 offcard was called **ShotLoft** up to v0.9.1, and **Sony Import** up to v0.4.0.
 
+## [0.14.2] - 2026-11-09
+
+- Check Before Formatting's ring now shows only the comparing, so 50% is half the circle and it
+  doesn't jump back to 0. While it first reads the card, the panel shows "Getting ready…" and how
+  many files it has read.
+
 ## [0.14.1] - 2026-11-07
 
 - **Change the backup folder while the card is being checked.** The check stops and starts again for
